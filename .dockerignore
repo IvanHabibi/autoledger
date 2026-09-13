@@ -1,0 +1,12 @@
+node_modules
+.git
+.env
+.env.*
+test
+*.md
+Dockerfile
+.dockerignore
+coverage
+*-service-account.json
+service-account*.json
+credentials*.json
