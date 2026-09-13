@@ -281,6 +281,23 @@ export SPREADSHEET_ID=... ALLOWED_TELEGRAM_IDS=...
 `npm run webhook:info` shows what Telegram currently has; `npm run webhook:delete`
 removes it and returns you to polling.
 
+**Packaging.** Cloud Functions runs plain `node`, which cannot load TypeScript, so
+`package.json` `main` points at `dist/webhook.js` and `deploy.sh` runs
+`npm run build` first. Two details follow from that:
+
+- `.gcloudignore` uploads `dist` and the package files but not `src`, `test`,
+  `.env` or any service-account key. Check what would be sent with
+  `gcloud meta list-files-for-upload`.
+- The deploy passes `GOOGLE_NODE_RUN_SCRIPTS=` so the Node buildpack does *not*
+  run `npm run build` remotely. Without it the build fails with
+  `TS18003: No inputs were found`, because `src` was never uploaded. Shipping the
+  locally built tree also means the artifact that runs is the one you tested
+  with `npx functions-framework --target=telegram`.
+
+Deploying leaves the bot in webhook mode, so `npm start` will then fail with
+`409 Conflict: terminated by setWebhook request` until you run
+`npm run webhook:delete`.
+
 **No Google key is stored.** The service account is attached to the function, so
 Application Default Credentials resolve from the metadata server and
 `GOOGLE_SERVICE_ACCOUNT_JSON` is left unset — there is no private key on disk, in

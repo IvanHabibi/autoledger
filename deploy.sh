@@ -38,6 +38,15 @@ for SECRET in anthropic-api-key telegram-bot-token telegram-webhook-secret; do
     --project "$PROJECT" >/dev/null
 done
 
+echo "==> Compiling TypeScript to dist/"
+# Cloud Functions runs plain `node`, which cannot load .ts, and package.json
+# "main" points at dist/webhook.js. Build here, upload dist, and tell the
+# buildpack not to run npm scripts (GOOGLE_NODE_RUN_SCRIPTS= below): src/ is
+# deliberately not uploaded, so a remote `npm run build` fails with TS18003
+# "no inputs were found". Shipping the locally built tree also means the
+# artifact that runs is the one verified with functions-framework.
+npm run build
+
 echo "==> Deploying $FUNCTION to $REGION"
 # --allow-unauthenticated is required: Telegram cannot present a Google identity
 # token. The webhook secret is what authenticates callers instead, which is why
@@ -56,6 +65,7 @@ gcloud functions deploy "$FUNCTION" \
   --max-instances 3 \
   --set-env-vars "SPREADSHEET_ID=${SPREADSHEET_ID},ALLOWED_TELEGRAM_IDS=${ALLOWED_TELEGRAM_IDS},TIMEZONE=${TIMEZONE},CLAUDE_MODEL=${CLAUDE_MODEL}" \
   --set-secrets "ANTHROPIC_API_KEY=anthropic-api-key:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token:latest,TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret:latest" \
+  --set-build-env-vars GOOGLE_NODE_RUN_SCRIPTS= \
   --project "$PROJECT"
 
 URL="$(gcloud functions describe "$FUNCTION" --region "$REGION" --gen2 \
