@@ -7,6 +7,7 @@
  * overwritten, so this can be used to repair a sheet as well as create one.
  */
 import { loadSheetsConfig } from "../src/config.js";
+import type { SheetsConfig } from "../src/config.js";
 import {
   createSheetsContext,
   describeSheetsError,
@@ -15,6 +16,18 @@ import {
 } from "../src/sheets/client.js";
 import { CONFIG_HEADERS, DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES } from "../src/sheets/config.js";
 import { HEADERS } from "../src/sheets/transactions.js";
+
+/**
+ * ADC does not imply "no key file": GOOGLE_APPLICATION_CREDENTIALS points it at
+ * one, which is the normal way to run as a service account off-cloud. Saying
+ * otherwise sends anyone debugging a 403 looking in the wrong place.
+ */
+function describeIdentity(config: SheetsConfig): string {
+  if (config.serviceAccount) return `${config.serviceAccount.client_email} (inline key)`;
+  const keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (keyFile) return `Application Default Credentials from ${keyFile}`;
+  return "Application Default Credentials (attached service account or gcloud login)";
+}
 
 async function existingTabs(ctx: SheetsContext): Promise<Map<string, number>> {
   const res = await ctx.api.spreadsheets.get({
@@ -89,12 +102,7 @@ async function main(): Promise<void> {
   const ctx = createSheetsContext(config);
 
   console.log(`Preparing spreadsheet ${config.spreadsheetId}`);
-  console.log(
-    `Identity: ${
-      config.serviceAccount?.client_email ??
-      "Application Default Credentials (no key file)"
-    }`,
-  );
+  console.log(`Identity: ${describeIdentity(config)}`);
   console.log("Share the sheet with that identity as an Editor, or this will 403.\n");
 
   const tabs = await existingTabs(ctx);

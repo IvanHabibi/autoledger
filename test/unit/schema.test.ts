@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildIntentSchema, toIntent, type IntentWire } from "../../src/parse/schema.js";
-import { fallbackCategoryOf } from "../../src/parse/claude.js";
+import { fallbackCategoryOf, supportsEffort } from "../../src/parse/claude.js";
 
 const CATEGORIES = ["Makanan & Minuman", "Transportasi", "Gaji", "Lain-lain"];
 
@@ -364,5 +364,16 @@ describe("fallbackCategoryOf", () => {
 
   it("uses the last category when there is no catch-all", () => {
     expect(fallbackCategoryOf(["Makanan", "Transportasi"])).toBe("Transportasi");
+  });
+});
+
+describe("supportsEffort", () => {
+  it("omits effort only for the models that reject it", () => {
+    // Sending effort to Haiku 4.5 returns a 400, which made CLAUDE_MODEL only
+    // look configurable — the documented cheap option failed outright.
+    expect(supportsEffort("claude-haiku-4-5")).toBe(false);
+    expect(supportsEffort("claude-sonnet-4-5")).toBe(false);
+    expect(supportsEffort("claude-opus-5")).toBe(true);
+    expect(supportsEffort("claude-sonnet-5")).toBe(true);
   });
 });

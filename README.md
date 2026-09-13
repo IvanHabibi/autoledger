@@ -202,9 +202,47 @@ yet; the `account` tag above is intentionally just a label.
 
 ## Cost
 
-About **$0.005 per entry** with the default `claude-opus-5` — roughly **$1.70 a
-month** at ten entries a day. Set `CLAUDE_MODEL=claude-haiku-4-5` in `.env` to
-cut that by about 5× in exchange for slightly weaker parsing of unusual phrasing.
+Measured against the real prompt, not estimated:
+
+| Model | Per entry | Per month @ 300 entries |
+|---|---|---|
+| `claude-opus-5` (default) | $0.0286 | **$8.58** |
+| `claude-sonnet-5` | $0.0114 | $3.43 |
+| `claude-haiku-4-5` | $0.0046 | $1.37 |
+
+Set `CLAUDE_MODEL` in `.env` to switch. Measured against the 33-case eval:
+
+| Model | Eval | Wall time | Verdict |
+|---|---|---|---|
+| `claude-opus-5` | 33/33 | ~96s | The repo default: highest accuracy. |
+| `claude-sonnet-5` | 33/33 | 90s | **Recommended.** Same accuracy, no slower, 60% cheaper. |
+| `claude-haiku-4-5` | 32/33 | 125s | Cheapest, but missed `thr 5jt` and is slower than Sonnet. |
+
+Haiku's one miss returned `unclear` rather than a wrong row, so its failure mode
+is safe — it just asks you to rephrase. Worth knowing that "THR" (the Indonesian
+holiday bonus) is a large annual amount to have to retype.
+
+Before trusting any cheaper model, run `npm run test:parse` against it; that eval
+exists precisely to tell you whether the Indonesian shorthand and the
+transfer-versus-expense distinction still hold. `deploy.sh` passes
+`CLAUDE_MODEL` through, so export it before deploying to keep the same choice.
+
+**The bill is input, not output.** One short sentence costs ~4,970 input tokens
+against ~150 output: roughly 2,340 for the system prompt and 1,940 for the
+structured-output schema, which is sent on every request. The category list alone
+is 195 tokens and appears three times (once in the prompt, twice in the schema).
+So the levers that matter are the ones that shrink or reuse the prefix.
+
+**Prompt caching is not a free win here.** Marking the system prompt with
+`cache_control` drops a cache *hit* to $0.0061 per entry — a 79% saving with no
+change of model. But the default cache lifetime is five minutes, and a *miss*
+costs $0.0348, which is 22% **more** than not caching at all. It therefore pays
+only if entries arrive in bursts; logging one purchase every few hours would make
+it more expensive. Measure your own pattern before enabling it.
+
+**A note on `effort`.** The code sends `output_config.effort: "low"`, which
+several models reject with a 400 — Haiku 4.5 and Sonnet 4.5 among them. It is
+omitted automatically for those (`supportsEffort` in `src/parse/claude.ts`).
 
 ## Deployment
 

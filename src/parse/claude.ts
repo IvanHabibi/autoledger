@@ -35,6 +35,23 @@ export class ParseFailure extends Error {
  */
 const MAX_TOKENS = 16_000;
 
+/**
+ * Models that reject `output_config.effort` with a 400.
+ *
+ * Effort is supported across the current Opus/Sonnet/Fable line but not on
+ * Haiku 4.5 or Sonnet 4.5, so sending it unconditionally makes CLAUDE_MODEL
+ * only appear configurable: pointing it at Haiku failed outright with
+ * "This model does not support the effort parameter."
+ *
+ * The default is to send effort, since current and future top-tier models take
+ * it; only known exceptions are listed.
+ */
+const MODELS_WITHOUT_EFFORT = new Set(["claude-haiku-4-5", "claude-sonnet-4-5"]);
+
+export function supportsEffort(model: string): boolean {
+  return !MODELS_WITHOUT_EFFORT.has(model);
+}
+
 export interface ParserOptions {
   apiKey: string;
   model: string;
@@ -144,14 +161,19 @@ export class Parser {
   ) {
     let response;
     try {
+      // effort "low" keeps thinking on (the default on Opus 5) but shallow,
+      // which is the right trade for extracting a few fields from one sentence.
+      // Omitted entirely on models that reject the parameter.
+      const outputConfig = supportsEffort(this.model)
+        ? { effort: "low" as const, format: zodOutputFormat(schema) }
+        : { format: zodOutputFormat(schema) };
+
       response = await this.client.messages.parse({
         model: this.model,
         max_tokens: MAX_TOKENS,
         system,
         messages: [{ role: "user", content }],
-        // effort "low" keeps thinking on (the default on Opus 5) but shallow,
-        // which is the right trade for extracting a few fields from one sentence.
-        output_config: { effort: "low", format: zodOutputFormat(schema) },
+        output_config: outputConfig,
       });
     } catch (error) {
       throw new ParseFailure(describeApiError(error), error);
