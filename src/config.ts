@@ -15,8 +15,14 @@ const EnvSchema = z.object({
   ALLOWED_TELEGRAM_IDS: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().min(10),
   CLAUDE_MODEL: z.string().default("claude-opus-5"),
-  GOOGLE_SERVICE_ACCOUNT_JSON: z.string().min(10),
+  // Optional on purpose. Running on Google Cloud with a service account attached
+  // to the function, Application Default Credentials supply the identity and
+  // there is no key file to store, leak, or rotate. Only set this off-cloud.
+  GOOGLE_SERVICE_ACCOUNT_JSON: z.string().min(10).optional(),
   SPREADSHEET_ID: z.string().min(10),
+  // Required in webhook mode: the function URL is public and unauthenticated,
+  // so this shared secret is what proves a request really came from Telegram.
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(16).optional(),
   SHEET_TRANSACTIONS: z.string().default("Transactions"),
   SHEET_CONFIG: z.string().default("Config"),
   TIMEZONE: z.string().default("Asia/Jakarta"),
@@ -27,11 +33,13 @@ export interface Config {
   allowedTelegramIds: Set<number>;
   anthropicApiKey: string;
   claudeModel: string;
-  serviceAccount: ServiceAccount;
+  /** Null means "use Application Default Credentials" — the norm on Google Cloud. */
+  serviceAccount: ServiceAccount | null;
   spreadsheetId: string;
   transactionsSheet: string;
   configSheet: string;
   timeZone: string;
+  webhookSecret: string | null;
 }
 
 /** Accepts the key either as raw JSON or base64-encoded JSON, since shell
@@ -113,10 +121,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     allowedTelegramIds: parseAllowedIds(e.ALLOWED_TELEGRAM_IDS),
     anthropicApiKey: e.ANTHROPIC_API_KEY,
     claudeModel: e.CLAUDE_MODEL,
-    serviceAccount: parseServiceAccount(e.GOOGLE_SERVICE_ACCOUNT_JSON),
+    serviceAccount: e.GOOGLE_SERVICE_ACCOUNT_JSON
+      ? parseServiceAccount(e.GOOGLE_SERVICE_ACCOUNT_JSON)
+      : null,
     spreadsheetId: e.SPREADSHEET_ID,
     transactionsSheet: e.SHEET_TRANSACTIONS,
     configSheet: e.SHEET_CONFIG,
     timeZone: e.TIMEZONE,
+    webhookSecret: e.TELEGRAM_WEBHOOK_SECRET ?? null,
   };
 }

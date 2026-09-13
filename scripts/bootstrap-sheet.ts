@@ -89,7 +89,13 @@ async function main(): Promise<void> {
   const ctx = createSheetsContext(config);
 
   console.log(`Preparing spreadsheet ${config.spreadsheetId}`);
-  console.log(`Service account: ${config.serviceAccount.client_email}\n`);
+  console.log(
+    `Identity: ${
+      config.serviceAccount?.client_email ??
+      "Application Default Credentials (no key file)"
+    }`,
+  );
+  console.log("Share the sheet with that identity as an Editor, or this will 403.\n");
 
   const tabs = await existingTabs(ctx);
 

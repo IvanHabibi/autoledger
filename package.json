@@ -14,7 +14,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run test/unit",
     "test:parse": "vitest run test/live",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "webhook:set": "tsx scripts/set-webhook.ts set",
+    "webhook:delete": "tsx scripts/set-webhook.ts delete",
+    "webhook:info": "tsx scripts/set-webhook.ts info",
+    "deploy": "./deploy.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
@@ -22,11 +26,17 @@
     "googleapis": "^180.0.0",
     "grammy": "^1.46.0",
     "tsx": "^4.23.13",
-    "zod": "^4.6.4"
+    "zod": "^4.6.4",
+    "@google-cloud/functions-framework": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
     "typescript": "^5.9.3",
     "vitest": "^5.0.0"
+  },
+  "main": "src/webhook.ts",
+  "overrides": {
+    "qs": "^6.16.0",
+    "uuid": "^11.1.1"
   }
 }

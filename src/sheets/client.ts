@@ -8,12 +8,27 @@ export interface SheetsContext {
   configSheet: string;
 }
 
+const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
+
+/**
+ * Two credential paths, and the one without a key file is the better one.
+ *
+ * On Google Cloud, attaching the service account to the function means
+ * Application Default Credentials resolve from the metadata server: no private
+ * key is stored anywhere, so there is nothing to leak, commit, or rotate. That
+ * is the deployed path, and why GOOGLE_SERVICE_ACCOUNT_JSON is optional.
+ *
+ * The explicit JWT is the fallback for running off-cloud — a laptop, a Pi, a
+ * container elsewhere — where no metadata server exists.
+ */
 export function createSheetsContext(config: Config): SheetsContext {
-  const auth = new google.auth.JWT({
-    email: config.serviceAccount.client_email,
-    key: config.serviceAccount.private_key,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-  });
+  const auth = config.serviceAccount
+    ? new google.auth.JWT({
+        email: config.serviceAccount.client_email,
+        key: config.serviceAccount.private_key,
+        scopes: SCOPES,
+      })
+    : new google.auth.GoogleAuth({ scopes: SCOPES });
 
   return {
     api: google.sheets({ version: "v4", auth }),
@@ -84,7 +99,10 @@ export function describeSheetsError(error: unknown): string {
     return "No spreadsheet with that SPREADSHEET_ID. Check the id in the sheet's URL.";
   }
   if (status === 401) {
-    return "Google rejected the service account key. Check GOOGLE_SERVICE_ACCOUNT_JSON.";
+    return (
+      "Google rejected the credentials. Off-cloud, check GOOGLE_SERVICE_ACCOUNT_JSON; " +
+      "on Google Cloud, check that a service account is attached to the function."
+    );
   }
   return `Google Sheets error: ${message}`;
 }

@@ -205,7 +205,10 @@ cut that by about 5× in exchange for slightly weaker parsing of unusual phrasin
 
 ## Deployment
 
-Long polling means there is nothing to expose. Any of these work:
+There are two modes, and they are mutually exclusive — Telegram either pushes
+updates to you or you pull them.
+
+### Long polling — a machine that stays on
 
 ```bash
 npm start                                  # foreground
@@ -213,9 +216,66 @@ docker build -t autoledger . && \
   docker run -d --restart unless-stopped --env-file .env autoledger
 ```
 
-For a cloud host (Fly.io, Railway, a small VPS), deploy the Docker image and set
-the same environment variables. Run **one instance only** — two pollers on the
-same bot token will fight over updates.
+Nothing to expose: no public URL, no certificate. Run **one instance only** —
+two pollers on the same bot token fight over updates.
+
+### Webhook on Cloud Functions — free tier, nothing always-on
+
+A Cloud Function is request-triggered and scales to zero, so it cannot hold a
+polling loop open. `src/webhook.ts` is the entrypoint for this mode; the bot and
+all its handlers are identical, only the delivery differs.
+
+```bash
+# 1. Store the two real secrets in Secret Manager (not in the repo, not in
+#    --set-env-vars, which would leave them readable in the function config).
+printf '%s' "$ANTHROPIC_API_KEY" | gcloud secrets create anthropic-api-key --data-file=-
+printf '%s' "$TELEGRAM_BOT_TOKEN" | gcloud secrets create telegram-bot-token --data-file=-
+openssl rand -hex 32 | tr -d '\n' | gcloud secrets create telegram-webhook-secret --data-file=-
+
+# 2. Deploy, and register the webhook with Telegram.
+export SPREADSHEET_ID=... ALLOWED_TELEGRAM_IDS=...
+./deploy.sh
+```
+
+`npm run webhook:info` shows what Telegram currently has; `npm run webhook:delete`
+removes it and returns you to polling.
+
+**No Google key is stored.** The service account is attached to the function, so
+Application Default Credentials resolve from the metadata server and
+`GOOGLE_SERVICE_ACCOUNT_JSON` is left unset — there is no private key on disk, in
+the repo, or in Secret Manager to leak or rotate. `src/sheets/client.ts` picks
+this path automatically when the variable is absent.
+
+**The webhook secret is not optional.** The function must be deployed
+`--allow-unauthenticated`, because Telegram cannot present a Google identity
+token. That makes the shared secret the only thing separating a public URL from
+fabricated ledger entries, so the function refuses to start without it and
+`test/unit/webhook-secret.test.ts` asserts the gate rejects requests lacking it.
+
+**Cost.** A household bot sends a few hundred messages a month against a free
+tier of 2M invocations and 200k vCPU-seconds, so this is free in practice. Note
+that Google still requires a billing account on file to deploy a 2nd-gen
+function, and `deploy.sh` caps `--max-instances 3` so a runaway cannot become a
+bill.
+
+**Two honest trade-offs:**
+
+- *Cold starts.* The first message after an idle period waits ~1–3s extra while
+  the instance boots. Subsequent messages are normal speed.
+- *Possible duplicate entries.* Telegram redelivers an update if the webhook is
+  too slow to answer. The handler returns 200 rather than an error on timeout,
+  which avoids the common case, but exactly-once delivery would need shared
+  state across instances — more machinery than this warrants. If a duplicate
+  ever appears, the entry has an Undo button.
+
+### Where secrets belong
+
+| | Verdict |
+|---|---|
+| Google Secret Manager | **Yes** — what `deploy.sh` uses. Free at this scale. |
+| GitHub repository, even private | **No.** A private repo is not a secret store: it stays in git history forever, is visible to every collaborator, and travels with clones and forks. Making a repo private does not un-leak something already pushed. |
+| GitHub Actions secrets | Only for injecting at deploy time if Actions does the deploying. Not somewhere the running app reads from. |
+| `.env` on your own machine | Fine for local development. Gitignored here. |
 
 ## Development
 
