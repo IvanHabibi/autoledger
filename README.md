@@ -318,8 +318,13 @@ bill.
 
 **Two honest trade-offs:**
 
-- *Cold starts.* The first message after an idle period waits ~1–3s extra while
-  the instance boots. Subsequent messages are normal speed.
+- *Cold starts.* Measured on the deployed function, a cold instance takes about
+  **7.4s** from start to `[boot] webhook ready`, so the first message after an
+  idle period lands around 10s once the model call is added. Subsequent messages
+  are normal speed. Most of that boot is importing the `googleapis` umbrella
+  package, which costs ~1.2s locally versus ~0.08s for the Sheets-only
+  `@googleapis/sheets`; switching would be the obvious fix if the wait becomes
+  annoying.
 - *Possible duplicate entries.* Telegram redelivers an update if the webhook is
   too slow to answer. The handler returns 200 rather than an error on timeout,
   which avoids the common case, but exactly-once delivery would need shared

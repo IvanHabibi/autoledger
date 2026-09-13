@@ -5,7 +5,7 @@
   "description": "Household income and expense ledger driven from Telegram, written to Google Sheets",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -23,12 +23,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
+    "@google-cloud/functions-framework": "^4.0.0",
     "dotenv": "^17.4.2",
     "googleapis": "^180.0.0",
     "grammy": "^1.46.0",
     "tsx": "^4.23.13",
-    "zod": "^4.6.4",
-    "@google-cloud/functions-framework": "^4.0.0"
+    "zod": "^4.6.4"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
