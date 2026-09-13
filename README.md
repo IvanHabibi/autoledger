@@ -228,8 +228,18 @@ npm run typecheck
 
 `npm test` covers the pure logic — date arithmetic, rupiah formatting, the
 report aggregator, the sheet row coercions, the intent narrowing, callback-data
-validation. `npm run test:parse` is the one that proves the parser genuinely
-understands `50rb`, `2,5jt` and `kemarin`; it costs a few cents to run.
+validation. It needs no keys and touches no network.
+
+`npm run test:parse` is the one that proves the parser genuinely understands
+`50rb`, `2,5jt`, `kemarin`, and the transfer-versus-expense distinction. It costs
+a few cents to run and needs only **`ANTHROPIC_API_KEY`** — no Telegram token and
+no Google credentials, since it exercises the parser alone. Put it in `.env`
+(the suite loads dotenv itself) or export it.
+
+If the key is missing, `npm run test:parse` **fails** rather than skipping
+quietly. A skipped suite still exits 0, and since this is the only check that
+tests the parser against reality, a silent green run would be worse than a red
+one.
 
 ## Troubleshooting
 

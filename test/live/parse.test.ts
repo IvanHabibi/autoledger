@@ -4,7 +4,13 @@
  * Skipped unless ANTHROPIC_API_KEY is set, because it makes real calls and
  * costs real (very small) money. This is the only test that proves the parser
  * actually understands Indonesian shorthand rather than merely compiling.
+ *
+ * The dotenv import matters: vitest does not put `.env` into `process.env` by
+ * itself, and `.env` is where every other secret in this project lives. Without
+ * it, a key in `.env` leaves the whole suite silently skipped — a green run
+ * that verified nothing, which is worse than a red one.
  */
+import "dotenv/config";
 import { describe, expect, it } from "vitest";
 import { Parser } from "../../src/parse/claude.js";
 import { DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES } from "../../src/sheets/config.js";
@@ -13,6 +19,25 @@ import { addDays, todayInTimeZone } from "../../src/util/date.js";
 const apiKey = process.env.ANTHROPIC_API_KEY;
 const TIME_ZONE = "Asia/Jakarta";
 const PER_CASE_TIMEOUT_MS = 90_000;
+
+/**
+ * A real, always-running assertion rather than a console warning — vitest
+ * discards module-scope logging from a skipped file, so a warning here would be
+ * invisible and the run would look green.
+ *
+ * Failing is the honest outcome: `npm run test:parse` is only ever run
+ * deliberately, and if it cannot reach the API then the parser was not verified.
+ * `npm test` runs test/unit only, so this never breaks the keyless path.
+ */
+describe("live eval preconditions", () => {
+  it("has ANTHROPIC_API_KEY set", () => {
+    expect(
+      apiKey,
+      "ANTHROPIC_API_KEY is not set, so every case below was skipped and the " +
+        "parser was NOT verified. Put it in .env or export it, then re-run.",
+    ).toBeTruthy();
+  });
+});
 
 interface TransactionCase {
   text: string;
