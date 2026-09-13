@@ -89,6 +89,9 @@ npm run bootstrap     # creates the tabs, headers and starting categories
 npm start
 ```
 
+`npm run bootstrap` only talks to Google, so it needs just `SPREADSHEET_ID` and
+the credentials — you can prepare the sheet before the Telegram bot exists.
+
 `npm run bootstrap` is safe to re-run — it never overwrites categories or member
 names you've edited.
 

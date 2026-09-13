@@ -10,35 +10,47 @@ const ServiceAccountSchema = z.object({
 
 export type ServiceAccount = z.infer<typeof ServiceAccountSchema>;
 
-const EnvSchema = z.object({
-  TELEGRAM_BOT_TOKEN: z.string().min(10, "looks too short to be a bot token"),
-  ALLOWED_TELEGRAM_IDS: z.string().min(1),
-  ANTHROPIC_API_KEY: z.string().min(10),
-  CLAUDE_MODEL: z.string().default("claude-opus-5"),
+/**
+ * Split in two on purpose. `npm run bootstrap` only talks to Google, and during
+ * first-time setup it is natural to prepare the sheet before the Telegram bot
+ * even exists — so it should not be blocked by a missing bot token.
+ */
+const SheetsEnvSchema = z.object({
   // Optional on purpose. Running on Google Cloud with a service account attached
   // to the function, Application Default Credentials supply the identity and
   // there is no key file to store, leak, or rotate. Only set this off-cloud.
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().min(10).optional(),
   SPREADSHEET_ID: z.string().min(10),
-  // Required in webhook mode: the function URL is public and unauthenticated,
-  // so this shared secret is what proves a request really came from Telegram.
-  TELEGRAM_WEBHOOK_SECRET: z.string().min(16).optional(),
   SHEET_TRANSACTIONS: z.string().default("Transactions"),
   SHEET_CONFIG: z.string().default("Config"),
   TIMEZONE: z.string().default("Asia/Jakarta"),
 });
 
-export interface Config {
-  telegramBotToken: string;
-  allowedTelegramIds: Set<number>;
-  anthropicApiKey: string;
-  claudeModel: string;
+const EnvSchema = SheetsEnvSchema.extend({
+  TELEGRAM_BOT_TOKEN: z.string().min(10, "looks too short to be a bot token"),
+  ALLOWED_TELEGRAM_IDS: z.string().min(1),
+  ANTHROPIC_API_KEY: z.string().min(10),
+  CLAUDE_MODEL: z.string().default("claude-opus-5"),
+  // Required in webhook mode: the function URL is public and unauthenticated,
+  // so this shared secret is what proves a request really came from Telegram.
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(16).optional(),
+});
+
+/** What the Sheets layer and the bootstrap script need, and nothing more. */
+export interface SheetsConfig {
   /** Null means "use Application Default Credentials" — the norm on Google Cloud. */
   serviceAccount: ServiceAccount | null;
   spreadsheetId: string;
   transactionsSheet: string;
   configSheet: string;
   timeZone: string;
+}
+
+export interface Config extends SheetsConfig {
+  telegramBotToken: string;
+  allowedTelegramIds: Set<number>;
+  anthropicApiKey: string;
+  claudeModel: string;
   webhookSecret: string | null;
 }
 
@@ -97,30 +109,24 @@ function parseAllowedIds(raw: string): Set<number> {
   return new Set(ids);
 }
 
-/** Validates the whole environment up front, so a misconfiguration fails at
- *  startup with a readable message rather than mid-conversation. */
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const parsed = EnvSchema.safeParse(env);
-  if (!parsed.success) {
-    const issues = parsed.error.issues
-      .map((issue) => {
-        const name = String(issue.path[0] ?? "(root)");
-        // "expected string, received undefined" reads as a type puzzle; for a
-        // first run the useful fact is simply that the variable is missing.
-        const reason = env[name] === undefined ? "not set" : issue.message;
-        return `  - ${name}: ${reason}`;
-      })
-      .join("\n");
-    throw new Error(`Invalid environment configuration:\n${issues}\n\nSee .env.example.`);
-  }
-  const e = parsed.data;
-  assertValidTimeZone(e.TIMEZONE);
+function describeIssues(error: z.ZodError, env: NodeJS.ProcessEnv): never {
+  const issues = error.issues
+    .map((issue) => {
+      const name = String(issue.path[0] ?? "(root)");
+      // "expected string, received undefined" reads as a type puzzle; for a
+      // first run the useful fact is simply that the variable is missing.
+      const reason = env[name] === undefined ? "not set" : issue.message;
+      return `  - ${name}: ${reason}`;
+    })
+    .join("\n");
+  throw new Error(`Invalid environment configuration:\n${issues}\n\nSee .env.example.`);
+}
 
+function toSheetsConfig(
+  e: z.infer<typeof SheetsEnvSchema>,
+): SheetsConfig {
+  assertValidTimeZone(e.TIMEZONE);
   return {
-    telegramBotToken: e.TELEGRAM_BOT_TOKEN,
-    allowedTelegramIds: parseAllowedIds(e.ALLOWED_TELEGRAM_IDS),
-    anthropicApiKey: e.ANTHROPIC_API_KEY,
-    claudeModel: e.CLAUDE_MODEL,
     serviceAccount: e.GOOGLE_SERVICE_ACCOUNT_JSON
       ? parseServiceAccount(e.GOOGLE_SERVICE_ACCOUNT_JSON)
       : null,
@@ -128,6 +134,32 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     transactionsSheet: e.SHEET_TRANSACTIONS,
     configSheet: e.SHEET_CONFIG,
     timeZone: e.TIMEZONE,
+  };
+}
+
+/**
+ * Just enough to reach the spreadsheet. Used by `npm run bootstrap`, so the
+ * sheet can be prepared before a Telegram bot or an Anthropic key exists.
+ */
+export function loadSheetsConfig(env: NodeJS.ProcessEnv = process.env): SheetsConfig {
+  const parsed = SheetsEnvSchema.safeParse(env);
+  if (!parsed.success) describeIssues(parsed.error, env);
+  return toSheetsConfig(parsed.data);
+}
+
+/** Validates the whole environment up front, so a misconfiguration fails at
+ *  startup with a readable message rather than mid-conversation. */
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const parsed = EnvSchema.safeParse(env);
+  if (!parsed.success) describeIssues(parsed.error, env);
+  const e = parsed.data;
+
+  return {
+    ...toSheetsConfig(e),
+    telegramBotToken: e.TELEGRAM_BOT_TOKEN,
+    allowedTelegramIds: parseAllowedIds(e.ALLOWED_TELEGRAM_IDS),
+    anthropicApiKey: e.ANTHROPIC_API_KEY,
+    claudeModel: e.CLAUDE_MODEL,
     webhookSecret: e.TELEGRAM_WEBHOOK_SECRET ?? null,
   };
 }

@@ -6,7 +6,7 @@
  * Safe to re-run. Existing categories and member mappings are never
  * overwritten, so this can be used to repair a sheet as well as create one.
  */
-import { loadConfig } from "../src/config.js";
+import { loadSheetsConfig } from "../src/config.js";
 import {
   createSheetsContext,
   describeSheetsError,
@@ -85,7 +85,7 @@ function formatTransactions(sheetId: number) {
 }
 
 async function main(): Promise<void> {
-  const config = loadConfig();
+  const config = loadSheetsConfig();
   const ctx = createSheetsContext(config);
 
   console.log(`Preparing spreadsheet ${config.spreadsheetId}`);

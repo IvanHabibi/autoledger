@@ -1,5 +1,5 @@
 import { google, type sheets_v4 } from "googleapis";
-import type { Config } from "../config.js";
+import type { SheetsConfig } from "../config.js";
 
 export interface SheetsContext {
   api: sheets_v4.Sheets;
@@ -21,7 +21,7 @@ const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
  * The explicit JWT is the fallback for running off-cloud — a laptop, a Pi, a
  * container elsewhere — where no metadata server exists.
  */
-export function createSheetsContext(config: Config): SheetsContext {
+export function createSheetsContext(config: SheetsConfig): SheetsContext {
   const auth = config.serviceAccount
     ? new google.auth.JWT({
         email: config.serviceAccount.client_email,
