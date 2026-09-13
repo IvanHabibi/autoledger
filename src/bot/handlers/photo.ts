@@ -72,7 +72,7 @@ export function registerPhotoHandler(bot: Bot, app: App): void {
 
     const caption = ctx.message.caption?.trim() ?? null;
     const sheetConfig = await readSheetConfig(app.sheets);
-    const intent = await app.parser.parseReceipt(image, caption, sheetConfig.categories);
+    const intent = await app.parser.parseReceipt(image, caption, sheetConfig);
 
     if (intent.kind === "transaction") {
       await recordTransaction(

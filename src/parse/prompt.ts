@@ -8,6 +8,7 @@
 
 export interface PromptContext {
   categories: readonly string[];
+  accounts: readonly string[];
   fallbackCategory: string;
   /** Today in the household timezone, YYYY-MM-DD. */
   today: string;
@@ -41,6 +42,12 @@ DATES:
   year, unless that would be in the future, in which case the previous year.
 - Never output a date after ${ctx.today}.
 
+ACCOUNT (optional — leave null unless the message actually says):
+- Set it when a payment method or account is named: "pake bca" / "dari gopay" /
+  "debit mandiri" / "qris ovo" / "cash" / "tunai" / "transfer bca".
+${ctx.accounts.length > 0 ? `- Spell it exactly as one of: ${ctx.accounts.join(", ")}.\n` : ""}\
+- Never guess an account from the kind of purchase. No mention means null.
+
 CATEGORIES — choose exactly one from this list and never invent another:
 ${ctx.categories.map((c) => `- ${c}`).join("\n")}
 If nothing genuinely fits, use "${ctx.fallbackCategory}".
@@ -62,10 +69,32 @@ First decide what the message is:
 - "query" — it asks a question about money already recorded.
 - "unclear" — neither of those, or a transaction whose amount you cannot determine.
 
-INCOME vs EXPENSE:
-- Treat as income: gaji, salary, bonus, THR, terima, diterima, uang masuk, dapat,
-  dapet, untung, jual, penjualan, refund, cashback, dividen, bunga, "transferan masuk".
-- Everything else is an expense, including bill payments and money transferred out.
+EXPENSE vs INCOME vs TRANSFER — the three-way choice, and the one that matters most:
+
+- "income" — money entering the household from outside: gaji, salary, bonus, THR,
+  terima, diterima, uang masuk, dapat, dapet, untung, jual, penjualan, refund,
+  cashback, dividen, bunga, "transferan masuk".
+
+- "transfer" — money moved between accounts the household ALREADY owns. Nothing was
+  earned or spent; it only changed place. This includes:
+    "transfer ke rekening Mandiri 1jt"   → our BCA to our Mandiri
+    "tarik tunai 500rb"                  → our bank to our cash (a withdrawal!)
+    "setor tunai 1jt"                    → our cash to our bank
+    "top up gopay 200rb"                 → our bank to our e-wallet
+    "pindah ke tabungan 2jt"             → our current account to our savings
+    "bayar kartu kredit 3jt"             → paying off our own card balance
+  Use the category "Pindah Dana" for these.
+
+- "expense" — money leaving the household for anything or anyone else. Note that a
+  transfer to another PERSON is an expense, not a transfer:
+    "transfer ke ibu 200rb"              → expense (leaves the household)
+    "bayar listrik 350rb"                → expense
+    "beli beras 50rb"                    → expense
+
+The test is simple: after the transaction, is the money still ours? If yes it is a
+transfer; if no it is an expense. When a message is genuinely ambiguous about whose
+account received the money, choose "expense" and set confidence "low" — but never
+guess "transfer" just because the word "transfer" appears.
 
 QUESTIONS — signals include: berapa, total, habis berapa, sisa, rekap, laporan,
 ringkasan, "how much", "spent", "summary", or a trailing question mark.

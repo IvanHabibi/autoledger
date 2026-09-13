@@ -22,13 +22,28 @@ export const DEFAULT_CATEGORIES = [
   "Cicilan & Pinjaman",
   "Tabungan & Investasi",
   "Pajak & Administrasi",
+  "Pindah Dana",
   "Gaji",
   "Bonus & THR",
   "Pendapatan Lain",
   "Lain-lain",
 ] as const;
 
-export const CONFIG_HEADERS = ["Category", "Notes", "Telegram ID", "Member Name"] as const;
+/**
+ * Account / payment-method names. Purely descriptive tags for slicing spending
+ * by where the money went through — no balances are tracked against them, on
+ * purpose: a balance is only true if capture is complete, and a chat ledger
+ * cannot guarantee that. The bank app remains the source of truth for balances.
+ */
+export const DEFAULT_ACCOUNTS = ["Cash", "BCA", "Mandiri", "GoPay", "OVO"] as const;
+
+export const CONFIG_HEADERS = [
+  "Category",
+  "Notes",
+  "Telegram ID",
+  "Member Name",
+  "Account",
+] as const;
 
 /** Category edits should take effect without a restart, but not cost a read per message. */
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -37,11 +52,15 @@ let cache: { at: number; value: SheetConfig } | null = null;
 
 export function parseConfigValues(rows: unknown[][]): SheetConfig {
   const categories: string[] = [];
+  const accounts: string[] = [];
   const members = new Map<number, string>();
 
   for (const row of rows) {
     const category = String(row[0] ?? "").trim();
     if (category !== "") categories.push(category);
+
+    const account = String(row[4] ?? "").trim();
+    if (account !== "") accounts.push(account);
 
     const idText = String(row[2] ?? "").trim();
     const name = String(row[3] ?? "").trim();
@@ -53,6 +72,9 @@ export function parseConfigValues(rows: unknown[][]): SheetConfig {
 
   return {
     categories: categories.length > 0 ? categories : [...DEFAULT_CATEGORIES],
+    // An empty Account column is fine — the tag is optional, so an empty list
+    // just means nothing gets normalised and whatever the model reads is kept.
+    accounts,
     members,
   };
 }
@@ -67,7 +89,7 @@ export async function readSheetConfig(
 
   const res = await ctx.api.spreadsheets.values.get({
     spreadsheetId: ctx.spreadsheetId,
-    range: `${quoteSheetName(ctx.configSheet)}!A2:D`,
+    range: `${quoteSheetName(ctx.configSheet)}!A2:E`,
     valueRenderOption: "UNFORMATTED_VALUE",
   });
 

@@ -4,9 +4,12 @@ import { fallbackCategoryOf } from "../../src/parse/claude.js";
 
 const CATEGORIES = ["Makanan & Minuman", "Transportasi", "Gaji", "Lain-lain"];
 
+const ACCOUNTS = ["BCA", "GoPay"];
+
 const NARROW = {
   today: "2026-09-13",
   categories: CATEGORIES,
+  accounts: ACCOUNTS,
   fallbackCategory: "Lain-lain",
   rawText: "beli beras 50rb",
 };
@@ -20,6 +23,7 @@ function wire(overrides: Partial<IntentWire>): IntentWire {
     category: null,
     description: null,
     merchant: null,
+    account: null,
     date: null,
     confidence: null,
     q_scope: null,
@@ -92,6 +96,7 @@ describe("toIntent", () => {
         category: "Makanan & Minuman",
         description: "beli beras",
         merchant: "Indomaret",
+        account: null,
         date: "2026-09-12",
         confidence: "high",
       },
@@ -232,6 +237,57 @@ describe("toIntent", () => {
       NARROW,
     );
     expect(intent.kind === "transaction" && intent.transaction.category).toBe("Transportasi");
+  });
+
+  it("narrows a transfer", () => {
+    const intent = toIntent(
+      wire({
+        kind: "transaction",
+        tx_type: "transfer",
+        amount_idr: 1_000_000,
+        category: "Transportasi",
+        description: "pindah ke mandiri",
+      }),
+      NARROW,
+    );
+    expect(intent.kind === "transaction" && intent.transaction.type).toBe("transfer");
+  });
+
+  it("normalises an account's casing against the configured list", () => {
+    const intent = toIntent(
+      wire({ kind: "transaction", tx_type: "expense", amount_idr: 1000, account: " bca " }),
+      NARROW,
+    );
+    // Without this, "bca" and "BCA" become separate buckets when grouping.
+    expect(intent.kind === "transaction" && intent.transaction.account).toBe("BCA");
+  });
+
+  it("keeps an account that is not on the list, rather than discarding it", () => {
+    const intent = toIntent(
+      wire({ kind: "transaction", tx_type: "expense", amount_idr: 1000, account: "Jenius" }),
+      NARROW,
+    );
+    expect(intent.kind === "transaction" && intent.transaction.account).toBe("Jenius");
+  });
+
+  it("treats a blank or missing account as absent", () => {
+    for (const account of [null, "", "   "]) {
+      const intent = toIntent(
+        wire({ kind: "transaction", tx_type: "expense", amount_idr: 1000, account }),
+        NARROW,
+      );
+      expect(intent.kind === "transaction" && intent.transaction.account).toBeNull();
+    }
+  });
+
+  it("accepts a transfer scope on a query", () => {
+    const intent = toIntent(wire({ kind: "query", q_scope: "transfer" }), NARROW);
+    expect(intent.kind === "query" && intent.query.scope).toBe("transfer");
+  });
+
+  it("accepts grouping by account", () => {
+    const intent = toIntent(wire({ kind: "query", q_group_by: "account" }), NARROW);
+    expect(intent.kind === "query" && intent.query.groupBy).toBe("account");
   });
 
   it("treats an unrecognised kind as unclear rather than guessing", () => {

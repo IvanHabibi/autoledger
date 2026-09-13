@@ -92,8 +92,9 @@ npm start
 `npm run bootstrap` is safe to re-run — it never overwrites categories or member
 names you've edited.
 
-Finally, open the **Config** tab and fill columns C and D with each member's
-Telegram ID and the name you want in the ledger's `payer` column.
+Finally, open the **Config** tab, fill columns C and D with each member's Telegram
+ID and the name you want in the ledger's `payer` column, and adjust column E to the
+accounts you actually use (or clear it — the account tag is optional).
 
 ## Using it
 
@@ -112,13 +113,35 @@ Just write naturally. Indonesian, English, or a mix:
 A bare number under 1000 is read as thousands (`beras 50` → Rp 50.000) and the
 reply is marked ⚠️ so you can correct it.
 
+### Moving money is not spending
+
+Money that only moves between accounts you already own is recorded as a
+`transfer` and kept out of both the income and expense totals:
+
+| You type | Recorded as |
+|---|---|
+| `transfer ke rekening mandiri 1jt` | transfer — your BCA to your Mandiri |
+| `tarik tunai 500rb` | transfer — your bank to your cash |
+| `top up gopay 200rb` | transfer — your bank to your e-wallet |
+| `transfer ke ibu 200rb` | **expense** — it left the household |
+
+The test is whether the money is still yours afterwards. Without this, an ATM
+withdrawal would show up as half a million rupiah of spending.
+
+### Tagging the account (optional)
+
+Mention a payment method and it gets tagged: `bayar listrik 350rb pake bca` →
+account `BCA`. Say nothing and it stays blank; nothing depends on it. It exists so
+you can later ask "berapa yang lewat GoPay bulan ini?" — it is a label for slicing,
+never a balance.
+
 Every entry comes with **↩️ Batalkan** (undo) and **🏷 Ganti kategori**.
 
 **Commands**
 
 | Command | Does |
 |---|---|
-| `/summary` | This month so far: income, expense, net, biggest categories |
+| `/summary` | This month so far: income, expense, net, biggest categories, and transfers listed separately |
 | `/summary lalu` | The whole previous month |
 | `/categories` | The current category list |
 | `/reload` | Re-read the Config tab immediately |
@@ -128,8 +151,10 @@ Every entry comes with **↩️ Batalkan** (undo) and **🏷 Ganti kategori**.
 
 **Transactions** — append-only, one row per entry:
 
-| id | timestamp_utc | date | type | amount_idr | category | description | merchant | payer | source | raw_text |
-|---|---|---|---|---|---|---|---|---|---|---|
+| id | timestamp_utc | date | type | amount_idr | category | description | merchant | account | payer | source | raw_text |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+
+`type` is `expense`, `income`, or `transfer`. `account` is an optional tag (see below).
 
 Amounts are written as real numbers and dates as real dates, so your own
 `SUMIF`s, pivot tables and charts work normally.
@@ -148,9 +173,29 @@ every edit re-resolves the row by id first.
 | A | Categories. The parser is told to use only these; anything else it returns is mapped to the catch-all (`Lain-lain`) rather than written through. |
 | B | Free notes, ignored by the bot. |
 | C, D | Telegram ID → member name, used for the `payer` column. |
+| E | Account / payment-method names, used to normalise what the parser returns. Optional — leave it empty and the tag simply goes unused. |
 
 You can edit rows in the sheet by hand. Anything with a broken amount, date or
 type is skipped when reporting rather than counted wrongly.
+
+## Why there are no balances
+
+Deliberately, the ledger tracks **flows** (what came in, what went out) and never
+**balances** (how much is in each account). This is a design decision, not a gap:
+
+- A balance is an identity — `opening + Σincome − Σexpense` — so it is only true if
+  every single movement is captured. A ledger you type into by choice cannot promise
+  that: bank fees, interest, autodebits, a cash purchase you forgot.
+- The two failure modes are not comparable. Miss an entry in a flow ledger and one
+  month's total is slightly low; next month is unaffected. Miss one in a balance
+  tracker and every balance after it is wrong, permanently, with nothing to correct
+  it. A balance you trust but that is wrong is worse than no balance.
+- Your bank and e-wallet apps already show exact balances, instantly and for free.
+
+If you ever want a net-worth view, the pattern to use is a periodic **snapshot** —
+record the real balance from the bank app once a month as an observation — never a
+running total. Each snapshot corrects any drift by construction. That is not built
+yet; the `account` tag above is intentionally just a label.
 
 ## Cost
 
@@ -196,3 +241,4 @@ understands `50rb`, `2,5jt` and `kemarin`; it costs a few cents to run.
 | Bot ignores you completely | Your Telegram ID isn't in `ALLOWED_TELEGRAM_IDS`. The log line shows the id that was rejected. |
 | `Anthropic rejected the API key` | Check `ANTHROPIC_API_KEY`. |
 | Amounts land 1000× too small | The message used a bare number the parser read literally. Check the ⚠️ marker and use the category/undo buttons. |
+| Spending looks too high | Check for money you only moved between your own accounts. It should be recorded as a `transfer`; if it landed as an `expense`, fix the `type` cell and phrase it more explicitly next time (`tarik tunai`, `pindah ke tabungan`). |

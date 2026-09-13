@@ -13,7 +13,7 @@ import {
   quoteSheetName,
   type SheetsContext,
 } from "../src/sheets/client.js";
-import { CONFIG_HEADERS, DEFAULT_CATEGORIES } from "../src/sheets/config.js";
+import { CONFIG_HEADERS, DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES } from "../src/sheets/config.js";
 import { HEADERS } from "../src/sheets/transactions.js";
 
 async function existingTabs(ctx: SheetsContext): Promise<Map<string, number>> {
@@ -146,6 +146,26 @@ async function main(): Promise<void> {
     console.log(`✓ seeded ${DEFAULT_CATEGORIES.length} categories`);
   }
 
+  const existingAccounts = await ctx.api.spreadsheets.values.get({
+    spreadsheetId: ctx.spreadsheetId,
+    range: `${quoteSheetName(config.configSheet)}!E2:E`,
+  });
+  const accountsSeeded = (existingAccounts.data.values ?? []).some(
+    (row) => String(row[0] ?? "").trim() !== "",
+  );
+
+  if (accountsSeeded) {
+    console.log("· accounts already present — left untouched");
+  } else {
+    await ctx.api.spreadsheets.values.update({
+      spreadsheetId: ctx.spreadsheetId,
+      range: `${quoteSheetName(config.configSheet)}!E2`,
+      valueInputOption: "RAW",
+      requestBody: { values: DEFAULT_ACCOUNTS.map((a) => [a]) },
+    });
+    console.log(`✓ seeded ${DEFAULT_ACCOUNTS.length} accounts (edit or delete as you like)`);
+  }
+
   // --- Cosmetics ------------------------------------------------------------
   await ctx.api.spreadsheets.batchUpdate({
     spreadsheetId: ctx.spreadsheetId,
@@ -174,7 +194,7 @@ async function main(): Promise<void> {
   console.log(`  1. Open https://docs.google.com/spreadsheets/d/${config.spreadsheetId}/edit`);
   console.log(
     `  2. In the "${config.configSheet}" tab, fill columns C and D with each member's ` +
-      "Telegram ID and name.",
+      "Telegram ID and name, and adjust column E to the accounts you actually use.",
   );
   console.log("  3. Start the bot with `npm start`.");
 }

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { quoteSheetName } from "../../src/sheets/client.js";
-import { DEFAULT_CATEGORIES, parseConfigValues, resolvePayer } from "../../src/sheets/config.js";
+import {
+  DEFAULT_CATEGORIES,
+  parseConfigValues,
+  resolvePayer,
+} from "../../src/sheets/config.js";
 import {
   HEADERS,
   coerceAmount,
@@ -19,6 +23,7 @@ const ROW: LedgerRow = {
   category: "Belanja Harian",
   description: "beli beras",
   merchant: "Indomaret",
+  account: "BCA",
   payer: "Ivan",
   source: "text",
   rawText: "beli beras 50rb di indomaret",
@@ -41,8 +46,9 @@ describe("row serialisation", () => {
     expect(values[4]).toBe(50_000); // a number, so the sheet's own SUMIFs work
   });
 
-  it("writes an absent merchant as an empty cell, not the text 'null'", () => {
+  it("writes an absent merchant or account as an empty cell, not the text 'null'", () => {
     expect(rowToValues({ ...ROW, merchant: null })[7]).toBe("");
+    expect(rowToValues({ ...ROW, account: null })[8]).toBe("");
   });
 
   it("survives a round trip", () => {
@@ -55,9 +61,18 @@ describe("row serialisation", () => {
       amountIdr: ROW.amountIdr,
       category: ROW.category,
       merchant: ROW.merchant,
+      account: ROW.account,
       payer: ROW.payer,
       source: ROW.source,
+      rawText: ROW.rawText,
     });
+  });
+
+  it("round-trips a transfer", () => {
+    const back = valuesToRow(rowToValues({ ...ROW, type: "transfer", category: "Pindah Dana" }));
+    // Before `transfer` was a valid type this returned null, which silently
+    // dropped every transfer row from every report.
+    expect(back?.type).toBe("transfer");
   });
 });
 
@@ -124,19 +139,33 @@ describe("valuesToRow", () => {
   });
 
   it("treats an unknown source as text", () => {
-    const values = base.map((v, i) => (i === 9 ? "whatsapp" : v));
+    const values = base.map((v, i) => (i === 10 ? "whatsapp" : v));
     expect(valuesToRow(values)?.source).toBe("text");
+  });
+
+  it("accepts transfer as a type", () => {
+    const values = base.map((v, i) => (i === 3 ? "Transfer" : v));
+    expect(valuesToRow(values)?.type).toBe("transfer");
+  });
+
+  it("reads the columns after the new account column from the right places", () => {
+    const row = valuesToRow(base);
+    expect(row?.account).toBe("BCA");
+    expect(row?.payer).toBe("Ivan");
+    expect(row?.source).toBe("text");
+    expect(row?.rawText).toBe(ROW.rawText);
   });
 });
 
 describe("parseConfigValues", () => {
-  it("reads categories from column A and members from C and D", () => {
+  it("reads categories from A, members from C and D, accounts from E", () => {
     const config = parseConfigValues([
-      ["Makanan", "", "111", "Ivan"],
-      ["Transportasi", "", "222", "Dina"],
-      ["Lain-lain", "", "", ""],
+      ["Makanan", "", "111", "Ivan", "Cash"],
+      ["Transportasi", "", "222", "Dina", "BCA"],
+      ["Lain-lain", "", "", "", ""],
     ]);
     expect(config.categories).toEqual(["Makanan", "Transportasi", "Lain-lain"]);
+    expect(config.accounts).toEqual(["Cash", "BCA"]);
     expect(config.members.get(111)).toBe("Ivan");
     expect(config.members.get(222)).toBe("Dina");
     expect(config.members.size).toBe(2);
@@ -157,6 +186,15 @@ describe("parseConfigValues", () => {
   it("keeps gaps in the category column from becoming blank categories", () => {
     const config = parseConfigValues([["Makanan"], [""], ["Transportasi"]]);
     expect(config.categories).toEqual(["Makanan", "Transportasi"]);
+  });
+
+  it("leaves accounts empty when the column is unused, since the tag is optional", () => {
+    expect(parseConfigValues([["Makanan"]]).accounts).toEqual([]);
+    expect(parseConfigValues([]).accounts).toEqual([]);
+  });
+
+  it("includes Pindah Dana among the defaults, so transfers have a category", () => {
+    expect(DEFAULT_CATEGORIES).toContain("Pindah Dana");
   });
 });
 

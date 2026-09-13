@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { Parser } from "../../src/parse/claude.js";
-import { DEFAULT_CATEGORIES } from "../../src/sheets/config.js";
+import { DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES } from "../../src/sheets/config.js";
 import { addDays, todayInTimeZone } from "../../src/util/date.js";
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -17,10 +17,11 @@ const PER_CASE_TIMEOUT_MS = 90_000;
 interface TransactionCase {
   text: string;
   amount: number;
-  type: "expense" | "income";
+  type: "expense" | "income" | "transfer";
   /** Checked only when set. */
   date?: string;
   merchantContains?: string;
+  account?: string;
 }
 
 describe.skipIf(!apiKey)("parser (live API)", () => {
@@ -31,6 +32,7 @@ describe.skipIf(!apiKey)("parser (live API)", () => {
   });
   const today = todayInTimeZone(TIME_ZONE);
   const yesterday = addDays(today, -1);
+  const config = { categories: DEFAULT_CATEGORIES, accounts: DEFAULT_ACCOUNTS };
 
   const transactions: TransactionCase[] = [
     { text: "beli beras 50rb di indomaret", amount: 50_000, type: "expense", merchantContains: "ndomaret" },
@@ -48,12 +50,27 @@ describe.skipIf(!apiKey)("parser (live API)", () => {
     { text: "thr 5jt", amount: 5_000_000, type: "income" },
     { text: "jual lemari bekas 1jt", amount: 1_000_000, type: "income" },
     { text: "groceries 75rb", amount: 75_000, type: "expense" },
+
+    // Money that only moved between our own accounts. Before a `transfer` type
+    // existed these all counted as spending.
+    { text: "transfer ke rekening mandiri 1jt", amount: 1_000_000, type: "transfer" },
+    { text: "tarik tunai 500rb", amount: 500_000, type: "transfer" },
+    { text: "top up gopay 200rb", amount: 200_000, type: "transfer" },
+    { text: "pindah ke tabungan 2jt", amount: 2_000_000, type: "transfer" },
+
+    // The discriminating pair: same verb, different destination. Money sent to
+    // another person has left the household, so it is an expense.
+    { text: "transfer ke ibu 200rb", amount: 200_000, type: "expense" },
+
+    // Account tagging.
+    { text: "bayar listrik 350rb pake bca", amount: 350_000, type: "expense", account: "BCA" },
+    { text: "beli kopi 25rb pake gopay", amount: 25_000, type: "expense", account: "GoPay" },
   ];
 
   it.each(transactions)(
     "reads “$text” as $type $amount",
-    async ({ text, amount, type, date, merchantContains }) => {
-      const intent = await parser.parseText(text, DEFAULT_CATEGORIES);
+    async ({ text, amount, type, date, merchantContains, account }) => {
+      const intent = await parser.parseText(text, config);
 
       expect(intent.kind, `"${text}" should be a transaction`).toBe("transaction");
       if (intent.kind !== "transaction") return;
@@ -63,6 +80,7 @@ describe.skipIf(!apiKey)("parser (live API)", () => {
       expect(DEFAULT_CATEGORIES).toContain(intent.transaction.category);
 
       if (date) expect(intent.transaction.date, `date for "${text}"`).toBe(date);
+      if (account) expect(intent.transaction.account, `account for "${text}"`).toBe(account);
       if (merchantContains) {
         expect(intent.transaction.merchant ?? "").toContain(merchantContains);
       }
@@ -73,11 +91,22 @@ describe.skipIf(!apiKey)("parser (live API)", () => {
   it(
     "reads a bare sub-1000 number as thousands, but flags it",
     async () => {
-      const intent = await parser.parseText("beras 50", DEFAULT_CATEGORIES);
+      const intent = await parser.parseText("beras 50", config);
       expect(intent.kind).toBe("transaction");
       if (intent.kind !== "transaction") return;
       expect(intent.transaction.amountIdr).toBe(50_000);
       expect(intent.transaction.confidence).toBe("low");
+    },
+    PER_CASE_TIMEOUT_MS,
+  );
+
+  it(
+    "leaves the account null when the message does not mention one",
+    async () => {
+      const intent = await parser.parseText("beli beras 50rb", config);
+      expect(intent.kind).toBe("transaction");
+      if (intent.kind !== "transaction") return;
+      expect(intent.transaction.account).toBeNull();
     },
     PER_CASE_TIMEOUT_MS,
   );
@@ -92,7 +121,7 @@ describe.skipIf(!apiKey)("parser (live API)", () => {
   it.each(questions)(
     "treats “%s” as a question",
     async (text) => {
-      const intent = await parser.parseText(text, DEFAULT_CATEGORIES);
+      const intent = await parser.parseText(text, config);
       expect(intent.kind, `"${text}" should be a query`).toBe("query");
       if (intent.kind !== "query") return;
       expect(intent.query.startDate <= intent.query.endDate).toBe(true);
@@ -104,7 +133,7 @@ describe.skipIf(!apiKey)("parser (live API)", () => {
   it(
     "resolves “bulan lalu” to the whole previous month",
     async () => {
-      const intent = await parser.parseText("total belanja bulan lalu", DEFAULT_CATEGORIES);
+      const intent = await parser.parseText("total belanja bulan lalu", config);
       expect(intent.kind).toBe("query");
       if (intent.kind !== "query") return;
       // Starts on the 1st and ends before this month begins.
@@ -117,7 +146,7 @@ describe.skipIf(!apiKey)("parser (live API)", () => {
   it.each(["halo", "makasih ya", "oke"])(
     "does not invent a transaction from “%s”",
     async (text) => {
-      const intent = await parser.parseText(text, DEFAULT_CATEGORIES);
+      const intent = await parser.parseText(text, config);
       expect(intent.kind, `"${text}" should not be recorded`).not.toBe("transaction");
     },
     PER_CASE_TIMEOUT_MS,
