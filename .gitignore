@@ -1,0 +1,18 @@
+node_modules/
+dist/
+
+# Secrets — never commit these
+.env
+.env.*
+!.env.example
+*-service-account.json
+service-account*.json
+credentials*.json
+gcp-key*.json
+
+# Tooling noise
+.DS_Store
+*.log
+npm-debug.log*
+coverage/
+.vitest/
