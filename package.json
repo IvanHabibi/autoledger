@@ -1,0 +1,32 @@
+{
+  "name": "autoledger",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Household income and expense ledger driven from Telegram, written to Google Sheets",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "bootstrap": "tsx scripts/bootstrap-sheet.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run test/unit",
+    "test:parse": "vitest run test/live",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
+    "dotenv": "^17.4.2",
+    "googleapis": "^180.0.0",
+    "grammy": "^1.46.0",
+    "tsx": "^4.23.13",
+    "zod": "^4.6.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

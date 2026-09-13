@@ -1,0 +1,125 @@
+/**
+ * Fixture eval against the real API. Run with `npm run test:parse`.
+ *
+ * Skipped unless ANTHROPIC_API_KEY is set, because it makes real calls and
+ * costs real (very small) money. This is the only test that proves the parser
+ * actually understands Indonesian shorthand rather than merely compiling.
+ */
+import { describe, expect, it } from "vitest";
+import { Parser } from "../../src/parse/claude.js";
+import { DEFAULT_CATEGORIES } from "../../src/sheets/config.js";
+import { addDays, todayInTimeZone } from "../../src/util/date.js";
+
+const apiKey = process.env.ANTHROPIC_API_KEY;
+const TIME_ZONE = "Asia/Jakarta";
+const PER_CASE_TIMEOUT_MS = 90_000;
+
+interface TransactionCase {
+  text: string;
+  amount: number;
+  type: "expense" | "income";
+  /** Checked only when set. */
+  date?: string;
+  merchantContains?: string;
+}
+
+describe.skipIf(!apiKey)("parser (live API)", () => {
+  const parser = new Parser({
+    apiKey: apiKey ?? "",
+    model: process.env.CLAUDE_MODEL ?? "claude-opus-5",
+    timeZone: TIME_ZONE,
+  });
+  const today = todayInTimeZone(TIME_ZONE);
+  const yesterday = addDays(today, -1);
+
+  const transactions: TransactionCase[] = [
+    { text: "beli beras 50rb di indomaret", amount: 50_000, type: "expense", merchantContains: "ndomaret" },
+    { text: "bensin 100k", amount: 100_000, type: "expense" },
+    { text: "kopi 18000", amount: 18_000, type: "expense" },
+    { text: "bayar listrik 350.000", amount: 350_000, type: "expense" },
+    { text: "beli pulsa 25 rb", amount: 25_000, type: "expense" },
+    { text: "grab ke kantor 32rb", amount: 32_000, type: "expense" },
+    { text: "setengah juta buat servis motor", amount: 500_000, type: "expense" },
+    { text: "seratus ribu buat obat", amount: 100_000, type: "expense" },
+    { text: "transfer ke ibu 200rb", amount: 200_000, type: "expense" },
+    { text: "kemarin makan siang 45rb", amount: 45_000, type: "expense", date: yesterday },
+    { text: "gaji 15jt", amount: 15_000_000, type: "income" },
+    { text: "dapat bonus 2,5jt", amount: 2_500_000, type: "income" },
+    { text: "thr 5jt", amount: 5_000_000, type: "income" },
+    { text: "jual lemari bekas 1jt", amount: 1_000_000, type: "income" },
+    { text: "groceries 75rb", amount: 75_000, type: "expense" },
+  ];
+
+  it.each(transactions)(
+    "reads “$text” as $type $amount",
+    async ({ text, amount, type, date, merchantContains }) => {
+      const intent = await parser.parseText(text, DEFAULT_CATEGORIES);
+
+      expect(intent.kind, `"${text}" should be a transaction`).toBe("transaction");
+      if (intent.kind !== "transaction") return;
+
+      expect(intent.transaction.amountIdr, `amount for "${text}"`).toBe(amount);
+      expect(intent.transaction.type, `direction for "${text}"`).toBe(type);
+      expect(DEFAULT_CATEGORIES).toContain(intent.transaction.category);
+
+      if (date) expect(intent.transaction.date, `date for "${text}"`).toBe(date);
+      if (merchantContains) {
+        expect(intent.transaction.merchant ?? "").toContain(merchantContains);
+      }
+    },
+    PER_CASE_TIMEOUT_MS,
+  );
+
+  it(
+    "reads a bare sub-1000 number as thousands, but flags it",
+    async () => {
+      const intent = await parser.parseText("beras 50", DEFAULT_CATEGORIES);
+      expect(intent.kind).toBe("transaction");
+      if (intent.kind !== "transaction") return;
+      expect(intent.transaction.amountIdr).toBe(50_000);
+      expect(intent.transaction.confidence).toBe("low");
+    },
+    PER_CASE_TIMEOUT_MS,
+  );
+
+  const questions = [
+    "berapa pengeluaran makanan bulan ini?",
+    "total belanja bulan lalu",
+    "habis berapa buat transport minggu ini",
+    "how much did we spend on food this month?",
+  ];
+
+  it.each(questions)(
+    "treats “%s” as a question",
+    async (text) => {
+      const intent = await parser.parseText(text, DEFAULT_CATEGORIES);
+      expect(intent.kind, `"${text}" should be a query`).toBe("query");
+      if (intent.kind !== "query") return;
+      expect(intent.query.startDate <= intent.query.endDate).toBe(true);
+      expect(intent.query.endDate <= today).toBe(true);
+    },
+    PER_CASE_TIMEOUT_MS,
+  );
+
+  it(
+    "resolves “bulan lalu” to the whole previous month",
+    async () => {
+      const intent = await parser.parseText("total belanja bulan lalu", DEFAULT_CATEGORIES);
+      expect(intent.kind).toBe("query");
+      if (intent.kind !== "query") return;
+      // Starts on the 1st and ends before this month begins.
+      expect(intent.query.startDate.endsWith("-01")).toBe(true);
+      expect(intent.query.endDate < `${today.slice(0, 7)}-01`).toBe(true);
+    },
+    PER_CASE_TIMEOUT_MS,
+  );
+
+  it.each(["halo", "makasih ya", "oke"])(
+    "does not invent a transaction from “%s”",
+    async (text) => {
+      const intent = await parser.parseText(text, DEFAULT_CATEGORIES);
+      expect(intent.kind, `"${text}" should not be recorded`).not.toBe("transaction");
+    },
+    PER_CASE_TIMEOUT_MS,
+  );
+});
