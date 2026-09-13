@@ -41,7 +41,10 @@ export function buildIntentSchema(
     kind: z.string().describe('Exactly one of "transaction", "query", "unclear".'),
 
     // For kind === "transaction"; null otherwise.
-    tx_type: z.string().nullable().describe('"expense" or "income".'),
+    // These descriptions are what the model actually reads next to the field it
+    // is filling, so they must list every accepted value. A value named only in
+    // the system prompt and missing here does not get produced.
+    tx_type: z.string().nullable().describe('"expense", "income" or "transfer".'),
     amount_idr: z.number().int().nullable().describe("Positive whole number of rupiah."),
     category: z.string().nullable().describe(`Exactly one of: ${categoryList}.`),
     description: z.string().nullable().describe("Short human summary, language of the message."),
@@ -54,7 +57,10 @@ export function buildIntentSchema(
     confidence: z.string().nullable().describe('"high", "medium" or "low".'),
 
     // For kind === "query"; null otherwise.
-    q_scope: z.string().nullable().describe('"expense", "income" or "both".'),
+    q_scope: z
+      .string()
+      .nullable()
+      .describe('"expense", "income", "transfer", or "both" for income and expense.'),
     q_start_date: z.string().nullable().describe("YYYY-MM-DD, inclusive."),
     q_end_date: z.string().nullable().describe("YYYY-MM-DD, inclusive."),
     q_categories: z
@@ -62,7 +68,10 @@ export function buildIntentSchema(
       .nullable()
       .describe(`Subset of: ${categoryList}. Empty array means every category.`),
     q_keyword: z.string().nullable().describe("Free-text term to match, if any."),
-    q_group_by: z.string().nullable().describe('"none", "category", "month" or "payer".'),
+    q_group_by: z
+      .string()
+      .nullable()
+      .describe('"none", "category", "month", "payer" or "account".'),
     q_label: z.string().nullable().describe('Short period label, e.g. "bulan ini".'),
 
     // For kind === "unclear".

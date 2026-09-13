@@ -68,7 +68,6 @@ describe.skipIf(!apiKey)("parser (live API)", () => {
     { text: "grab ke kantor 32rb", amount: 32_000, type: "expense" },
     { text: "setengah juta buat servis motor", amount: 500_000, type: "expense" },
     { text: "seratus ribu buat obat", amount: 100_000, type: "expense" },
-    { text: "transfer ke ibu 200rb", amount: 200_000, type: "expense" },
     { text: "kemarin makan siang 45rb", amount: 45_000, type: "expense", date: yesterday },
     { text: "gaji 15jt", amount: 15_000_000, type: "income" },
     { text: "dapat bonus 2,5jt", amount: 2_500_000, type: "income" },
@@ -82,6 +81,7 @@ describe.skipIf(!apiKey)("parser (live API)", () => {
     { text: "tarik tunai 500rb", amount: 500_000, type: "transfer" },
     { text: "top up gopay 200rb", amount: 200_000, type: "transfer" },
     { text: "pindah ke tabungan 2jt", amount: 2_000_000, type: "transfer" },
+    { text: "setor tunai 1jt", amount: 1_000_000, type: "transfer" },
 
     // The discriminating pair: same verb, different destination. Money sent to
     // another person has left the household, so it is an expense.

@@ -92,9 +92,19 @@ EXPENSE vs INCOME vs TRANSFER — the three-way choice, and the one that matters
     "beli beras 50rb"                    → expense
 
 The test is simple: after the transaction, is the money still ours? If yes it is a
-transfer; if no it is an expense. When a message is genuinely ambiguous about whose
-account received the money, choose "expense" and set confidence "low" — but never
-guess "transfer" just because the word "transfer" appears.
+transfer; if no it is an expense.
+
+Those verbs are decisive on their own, and a missing account name is NOT a reason to
+fall back to "expense". "tarik tunai", "setor tunai", "top up", "isi saldo", "pindah
+ke tabungan" and paying off our own card are transfers even when no account is named
+— a cash withdrawal is always our bank to our cash, and a top-up is always our money
+moving to our own wallet. Naming no account does not make these ambiguous.
+
+Ambiguity only ever arises over WHO received the money, and only when a person could
+plausibly be meant: "transfer ke Andi 500rb" might be our own second account or
+another person's, so choose "expense" with confidence "low". Conversely, never infer
+"transfer" merely because the word "transfer" appears — "transfer ke ibu" is an
+expense.
 
 QUESTIONS — signals include: berapa, total, habis berapa, sisa, rekap, laporan,
 ringkasan, "how much", "spent", "summary", or a trailing question mark.
