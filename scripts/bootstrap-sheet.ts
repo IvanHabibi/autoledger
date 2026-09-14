@@ -6,15 +6,28 @@
  * Safe to re-run. Existing categories and member mappings are never
  * overwritten, so this can be used to repair a sheet as well as create one.
  */
-import { loadConfig } from "../src/config.js";
+import { loadSheetsConfig } from "../src/config.js";
+import type { SheetsConfig } from "../src/config.js";
 import {
   createSheetsContext,
   describeSheetsError,
   quoteSheetName,
   type SheetsContext,
 } from "../src/sheets/client.js";
-import { CONFIG_HEADERS, DEFAULT_CATEGORIES } from "../src/sheets/config.js";
+import { CONFIG_HEADERS, DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES } from "../src/sheets/config.js";
 import { HEADERS } from "../src/sheets/transactions.js";
+
+/**
+ * ADC does not imply "no key file": GOOGLE_APPLICATION_CREDENTIALS points it at
+ * one, which is the normal way to run as a service account off-cloud. Saying
+ * otherwise sends anyone debugging a 403 looking in the wrong place.
+ */
+function describeIdentity(config: SheetsConfig): string {
+  if (config.serviceAccount) return `${config.serviceAccount.client_email} (inline key)`;
+  const keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (keyFile) return `Application Default Credentials from ${keyFile}`;
+  return "Application Default Credentials (attached service account or gcloud login)";
+}
 
 async function existingTabs(ctx: SheetsContext): Promise<Map<string, number>> {
   const res = await ctx.api.spreadsheets.get({
@@ -85,11 +98,12 @@ function formatTransactions(sheetId: number) {
 }
 
 async function main(): Promise<void> {
-  const config = loadConfig();
+  const config = loadSheetsConfig();
   const ctx = createSheetsContext(config);
 
   console.log(`Preparing spreadsheet ${config.spreadsheetId}`);
-  console.log(`Service account: ${config.serviceAccount.client_email}\n`);
+  console.log(`Identity: ${describeIdentity(config)}`);
+  console.log("Share the sheet with that identity as an Editor, or this will 403.\n");
 
   const tabs = await existingTabs(ctx);
 
@@ -146,6 +160,26 @@ async function main(): Promise<void> {
     console.log(`✓ seeded ${DEFAULT_CATEGORIES.length} categories`);
   }
 
+  const existingAccounts = await ctx.api.spreadsheets.values.get({
+    spreadsheetId: ctx.spreadsheetId,
+    range: `${quoteSheetName(config.configSheet)}!E2:E`,
+  });
+  const accountsSeeded = (existingAccounts.data.values ?? []).some(
+    (row) => String(row[0] ?? "").trim() !== "",
+  );
+
+  if (accountsSeeded) {
+    console.log("· accounts already present — left untouched");
+  } else {
+    await ctx.api.spreadsheets.values.update({
+      spreadsheetId: ctx.spreadsheetId,
+      range: `${quoteSheetName(config.configSheet)}!E2`,
+      valueInputOption: "RAW",
+      requestBody: { values: DEFAULT_ACCOUNTS.map((a) => [a]) },
+    });
+    console.log(`✓ seeded ${DEFAULT_ACCOUNTS.length} accounts (edit or delete as you like)`);
+  }
+
   // --- Cosmetics ------------------------------------------------------------
   await ctx.api.spreadsheets.batchUpdate({
     spreadsheetId: ctx.spreadsheetId,
@@ -174,7 +208,7 @@ async function main(): Promise<void> {
   console.log(`  1. Open https://docs.google.com/spreadsheets/d/${config.spreadsheetId}/edit`);
   console.log(
     `  2. In the "${config.configSheet}" tab, fill columns C and D with each member's ` +
-      "Telegram ID and name.",
+      "Telegram ID and name, and adjust column E to the accounts you actually use.",
   );
   console.log("  3. Start the bot with `npm start`.");
 }

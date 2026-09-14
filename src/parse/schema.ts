@@ -24,26 +24,43 @@ import { isIsoDate, monthBounds } from "../util/date.js";
  *
  * Everything the model says is untrusted until it has been through `toIntent`.
  */
-export function buildIntentSchema(categories: readonly string[]) {
+export function buildIntentSchema(
+  categories: readonly string[],
+  accounts: readonly string[] = [],
+) {
   if (categories.length === 0) {
     throw new Error("Cannot build a parse schema with no categories — check the Config tab.");
   }
   const categoryList = categories.map((c) => `"${c}"`).join(", ");
+  const accountHint =
+    accounts.length > 0
+      ? `Prefer one of: ${accounts.map((a) => `"${a}"`).join(", ")}.`
+      : "Use the name as written in the message.";
 
   return z.object({
     kind: z.string().describe('Exactly one of "transaction", "query", "unclear".'),
 
     // For kind === "transaction"; null otherwise.
-    tx_type: z.string().nullable().describe('"expense" or "income".'),
+    // These descriptions are what the model actually reads next to the field it
+    // is filling, so they must list every accepted value. A value named only in
+    // the system prompt and missing here does not get produced.
+    tx_type: z.string().nullable().describe('"expense", "income" or "transfer".'),
     amount_idr: z.number().int().nullable().describe("Positive whole number of rupiah."),
     category: z.string().nullable().describe(`Exactly one of: ${categoryList}.`),
     description: z.string().nullable().describe("Short human summary, language of the message."),
     merchant: z.string().nullable().describe("Shop or person, only if actually named."),
+    account: z
+      .string()
+      .nullable()
+      .describe(`Account or payment method, only if mentioned. ${accountHint}`),
     date: z.string().nullable().describe("YYYY-MM-DD."),
     confidence: z.string().nullable().describe('"high", "medium" or "low".'),
 
     // For kind === "query"; null otherwise.
-    q_scope: z.string().nullable().describe('"expense", "income" or "both".'),
+    q_scope: z
+      .string()
+      .nullable()
+      .describe('"expense", "income", "transfer", or "both" for income and expense.'),
     q_start_date: z.string().nullable().describe("YYYY-MM-DD, inclusive."),
     q_end_date: z.string().nullable().describe("YYYY-MM-DD, inclusive."),
     q_categories: z
@@ -51,7 +68,10 @@ export function buildIntentSchema(categories: readonly string[]) {
       .nullable()
       .describe(`Subset of: ${categoryList}. Empty array means every category.`),
     q_keyword: z.string().nullable().describe("Free-text term to match, if any."),
-    q_group_by: z.string().nullable().describe('"none", "category", "month" or "payer".'),
+    q_group_by: z
+      .string()
+      .nullable()
+      .describe('"none", "category", "month", "payer" or "account".'),
     q_label: z.string().nullable().describe('Short period label, e.g. "bulan ini".'),
 
     // For kind === "unclear".
@@ -66,6 +86,8 @@ export interface NarrowOptions {
   today: string;
   /** The live category list; anything outside it is replaced. */
   categories: readonly string[];
+  /** Known account names, used only to normalise casing. Unknown names are kept. */
+  accounts?: readonly string[];
   /** Category to fall back on. */
   fallbackCategory: string;
   /** The original message, used as a last-resort description. */
@@ -80,10 +102,10 @@ export interface NarrowOptions {
  */
 const IMPLAUSIBLE_AMOUNT_IDR = 10_000_000_000;
 
-const TX_TYPES = ["expense", "income"] as const;
+const TX_TYPES = ["expense", "income", "transfer"] as const;
 const CONFIDENCES = ["high", "medium", "low"] as const;
-const SCOPES = ["expense", "income", "both"] as const;
-const GROUP_BYS = ["none", "category", "month", "payer"] as const;
+const SCOPES = ["expense", "income", "transfer", "both"] as const;
+const GROUP_BYS = ["none", "category", "month", "payer", "account"] as const;
 
 /** Case- and whitespace-tolerant membership check with a fallback. */
 function oneOf<T extends string>(
@@ -106,6 +128,21 @@ function resolveCategory(
   const needle = value.trim().toLowerCase();
   if (needle === "") return fallback;
   return categories.find((name) => name.toLowerCase() === needle) ?? fallback;
+}
+
+/**
+ * Normalise an account tag's casing against the known list.
+ *
+ * A free-text tag fragments fast — "BCA", "bca" and "Bca" would become three
+ * separate buckets and quietly split any grouping. Matching the configured
+ * spelling fixes that, while an unrecognised name is still kept as written so
+ * the tag stays open-ended.
+ */
+function resolveAccount(value: string | null, accounts: readonly string[]): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const needle = trimmed.toLowerCase();
+  return accounts.find((name) => name.toLowerCase() === needle) ?? trimmed;
 }
 
 function unclear(note: string): Intent {
@@ -156,6 +193,7 @@ export function toIntent(wire: IntentWire, opts: NarrowOptions): Intent {
         category: resolveCategory(wire.category, opts.categories, opts.fallbackCategory),
         description: wire.description?.trim() || opts.rawText.trim(),
         merchant: merchant && merchant.length > 0 ? merchant : null,
+        account: resolveAccount(wire.account, opts.accounts ?? []),
         date,
         confidence,
       },

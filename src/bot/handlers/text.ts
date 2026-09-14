@@ -24,7 +24,7 @@ export function registerTextHandler(bot: Bot, app: App): void {
     await ctx.replyWithChatAction("typing");
 
     const sheetConfig = await readSheetConfig(app.sheets);
-    const intent = await app.parser.parseText(text, sheetConfig.categories);
+    const intent = await app.parser.parseText(text, sheetConfig);
 
     switch (intent.kind) {
       case "transaction":
