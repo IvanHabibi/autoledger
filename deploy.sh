@@ -51,6 +51,10 @@ echo "==> Deploying $FUNCTION to $REGION"
 # --allow-unauthenticated is required: Telegram cannot present a Google identity
 # token. The webhook secret is what authenticates callers instead, which is why
 # the function refuses to start without TELEGRAM_WEBHOOK_SECRET.
+# The ^|^ prefix on --set-env-vars switches gcloud's pair delimiter from comma
+# to |, so a value that itself contains commas survives. ALLOWED_TELEGRAM_IDS
+# does once a household has two members; with the default delimiter gcloud read
+# the second id as a stray positional argument and refused the deploy.
 gcloud functions deploy "$FUNCTION" \
   --gen2 \
   --runtime nodejs22 \
@@ -63,7 +67,7 @@ gcloud functions deploy "$FUNCTION" \
   --timeout 120s \
   --memory 512Mi \
   --max-instances 3 \
-  --set-env-vars "SPREADSHEET_ID=${SPREADSHEET_ID},ALLOWED_TELEGRAM_IDS=${ALLOWED_TELEGRAM_IDS},TIMEZONE=${TIMEZONE},CLAUDE_MODEL=${CLAUDE_MODEL}" \
+  --set-env-vars "^|^SPREADSHEET_ID=${SPREADSHEET_ID}|ALLOWED_TELEGRAM_IDS=${ALLOWED_TELEGRAM_IDS}|TIMEZONE=${TIMEZONE}|CLAUDE_MODEL=${CLAUDE_MODEL}" \
   --set-secrets "ANTHROPIC_API_KEY=anthropic-api-key:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token:latest,TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret:latest" \
   --set-build-env-vars GOOGLE_NODE_RUN_SCRIPTS= \
   --project "$PROJECT"
