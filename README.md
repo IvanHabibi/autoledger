@@ -175,11 +175,36 @@ every edit re-resolves the row by id first.
 |---|---|
 | A | Categories. The parser is told to use only these; anything else it returns is mapped to the catch-all (`Lain-lain`) rather than written through. |
 | B | Free notes, ignored by the bot. |
-| C, D | Telegram ID → member name, used for the `payer` column. |
+| C, D | Telegram ID → member name, used for the `payer` column **only**. This does *not* grant access — see below. |
 | E | Account / payment-method names, used to normalise what the parser returns. Optional — leave it empty and the tag simply goes unused. |
 
 You can edit rows in the sheet by hand. Anything with a broken amount, date or
 type is skipped when reporting rather than counted wrongly.
+
+### Adding another person
+
+Two separate things, and this catches everyone once:
+
+```bash
+# 1. Access — in .env. This is the only thing that lets someone use the bot.
+ALLOWED_TELEGRAM_IDS=111111111,222222222
+```
+
+```
+2. Their name — Config tab, columns C and D. Cosmetic only: it decides what
+   appears in the `payer` column instead of their Telegram display name.
+```
+
+Restart after editing `.env` — it is read once at startup, unlike the sheet.
+
+Adding someone to the Config tab alone leaves them silently ignored, so the bot
+calls it out: at startup in the log, and in the reply to `/reload`.
+
+**The allowlist stays out of the spreadsheet on purpose.** It is the only thing
+protecting the ledger, and the bot edits that sheet with its own credentials —
+if access were granted there, anyone able to edit the spreadsheet could grant it
+to themselves. An access-control list belongs with the secrets, not inside the
+data it protects.
 
 ## Why there are no balances
 

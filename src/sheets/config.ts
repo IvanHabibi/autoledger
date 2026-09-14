@@ -40,7 +40,7 @@ export const DEFAULT_ACCOUNTS = ["Cash", "BCA", "Mandiri", "GoPay", "OVO"] as co
 export const CONFIG_HEADERS = [
   "Category",
   "Notes",
-  "Telegram ID",
+  "Telegram ID (payer name only)",
   "Member Name",
   "Account",
 ] as const;
@@ -100,6 +100,29 @@ export async function readSheetConfig(
 
 export function clearConfigCache(): void {
   cache = null;
+}
+
+/**
+ * Members named in the Config tab who cannot actually use the bot.
+ *
+ * Mapping someone here only gives their entries a nicer `payer` name; access is
+ * granted solely by ALLOWED_TELEGRAM_IDS. Adding a person to the sheet and
+ * expecting them to be let in is the obvious mistake, and silently doing
+ * nothing is a poor way to report it — so boot and /reload call this and say so.
+ *
+ * The allowlist deliberately stays out of the spreadsheet: the bot edits that
+ * sheet with its own credentials, so anyone able to edit it could otherwise
+ * grant themselves access to the household's finances.
+ */
+export function membersMissingFromAllowlist(
+  config: SheetConfig,
+  allowedIds: ReadonlySet<number>,
+): Array<{ id: number; name: string }> {
+  const missing: Array<{ id: number; name: string }> = [];
+  for (const [id, name] of config.members) {
+    if (!allowedIds.has(id)) missing.push({ id, name });
+  }
+  return missing;
 }
 
 /** Falls back to the Telegram display name when the member isn't mapped. */

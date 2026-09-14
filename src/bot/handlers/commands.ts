@@ -1,6 +1,10 @@
 import type { Bot } from "grammy";
 import { summarize } from "../../report/aggregate.js";
-import { clearConfigCache, readSheetConfig } from "../../sheets/config.js";
+import {
+  clearConfigCache,
+  membersMissingFromAllowlist,
+  readSheetConfig,
+} from "../../sheets/config.js";
 import { readTransactions } from "../../sheets/transactions.js";
 import { monthBounds, previousMonthBounds, todayInTimeZone } from "../../util/date.js";
 import type { App } from "../app.js";
@@ -40,9 +44,25 @@ export function registerCommandHandlers(bot: Bot, app: App): void {
   bot.command("reload", async (ctx) => {
     clearConfigCache();
     const sheetConfig = await readSheetConfig(app.sheets, { force: true });
-    await ctx.reply(
+
+    const lines = [
       `♻️ Konfigurasi dimuat ulang: ${sheetConfig.categories.length} kategori, ` +
-        `${sheetConfig.members.size} anggota.`,
-    );
+        `${sheetConfig.members.size} anggota, ${sheetConfig.accounts.length} akun.`,
+    ];
+
+    // The most likely moment to catch the mistake: someone has just added a
+    // person to the Config tab and is expecting that to let them in.
+    const blocked = membersMissingFromAllowlist(sheetConfig, app.config.allowedTelegramIds);
+    for (const { id, name } of blocked) {
+      lines.push(
+        "",
+        `⚠️ <b>${escapeHtml(name)}</b> (<code>${id}</code>) ada di tab Config tapi ` +
+          "belum bisa pakai bot ini.",
+        "Tab Config cuma untuk nama di kolom <code>payer</code>. Izin akses diatur di " +
+          "<code>ALLOWED_TELEGRAM_IDS</code> — tambahkan id-nya di sana, lalu restart bot.",
+      );
+    }
+
+    await ctx.reply(lines.join("\n"), { parse_mode: "HTML" });
   });
 }

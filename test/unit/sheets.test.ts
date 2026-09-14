@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { quoteSheetName } from "../../src/sheets/client.js";
 import {
   DEFAULT_CATEGORIES,
+  membersMissingFromAllowlist,
   parseConfigValues,
   resolvePayer,
 } from "../../src/sheets/config.js";
@@ -207,5 +208,29 @@ describe("resolvePayer", () => {
 
   it("falls back to the Telegram display name for an unmapped member", () => {
     expect(resolvePayer(config, 999, "Someone Else")).toBe("Someone Else");
+  });
+});
+
+describe("membersMissingFromAllowlist", () => {
+  const config = parseConfigValues([
+    ["Makanan", "", "111", "Ivan"],
+    ["Transportasi", "", "222", "Dina"],
+  ]);
+
+  it("flags a member who was added to the sheet but not to the allowlist", () => {
+    // The exact mistake this exists to catch: adding someone to the Config tab
+    // gives them a payer name, never access.
+    expect(membersMissingFromAllowlist(config, new Set([111]))).toEqual([
+      { id: 222, name: "Dina" },
+    ]);
+  });
+
+  it("reports nothing once both are allowed", () => {
+    expect(membersMissingFromAllowlist(config, new Set([111, 222]))).toEqual([]);
+  });
+
+  it("ignores allowlisted ids that have no name mapped", () => {
+    // Allowed but unnamed is fine — they just show up under their Telegram name.
+    expect(membersMissingFromAllowlist(config, new Set([111, 222, 333]))).toEqual([]);
   });
 });
