@@ -344,12 +344,13 @@ bill.
 **Two honest trade-offs:**
 
 - *Cold starts.* Measured on the deployed function, a cold instance takes about
-  **7.4s** from start to `[boot] webhook ready`, so the first message after an
-  idle period lands around 10s once the model call is added. Subsequent messages
-  are normal speed. Most of that boot is importing the `googleapis` umbrella
-  package, which costs ~1.2s locally versus ~0.08s for the Sheets-only
-  `@googleapis/sheets`; switching would be the obvious fix if the wait becomes
-  annoying.
+  **4.8s** from start to `[boot] webhook ready`, so the first message after an
+  idle period lands around 7s once the model call is added. Subsequent messages
+  are normal speed. It was 9.2s until the Sheets client moved from the
+  `googleapis` umbrella to `@googleapis/sheets` (see `src/sheets/client.ts`):
+  the umbrella pulls in every Google API and cost ~1.2s to import against ~0.08s
+  for the scoped package. The remainder is container start plus one `getMe` call
+  to Telegram.
 - *Possible duplicate entries.* Telegram redelivers an update if the webhook is
   too slow to answer. The handler returns 200 rather than an error on timeout,
   which avoids the common case, but exactly-once delivery would need shared

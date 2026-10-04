@@ -1,4 +1,5 @@
-import { google, type sheets_v4 } from "googleapis";
+import { sheets, type sheets_v4 } from "@googleapis/sheets";
+import { GoogleAuth, JWT } from "google-auth-library";
 import type { SheetsConfig } from "../config.js";
 
 export interface SheetsContext {
@@ -8,6 +9,12 @@ export interface SheetsContext {
   configSheet: string;
 }
 
+/**
+ * The Sheets-only package, not the `googleapis` umbrella, is deliberate: the
+ * umbrella pulls in every Google API and costs ~1.2s to import against ~0.08s
+ * for this one. On a function that scales to zero that lands on every cold
+ * start, and a slow first response had users double-tapping buttons.
+ */
 const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 
 /**
@@ -23,15 +30,15 @@ const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
  */
 export function createSheetsContext(config: SheetsConfig): SheetsContext {
   const auth = config.serviceAccount
-    ? new google.auth.JWT({
+    ? new JWT({
         email: config.serviceAccount.client_email,
         key: config.serviceAccount.private_key,
         scopes: SCOPES,
       })
-    : new google.auth.GoogleAuth({ scopes: SCOPES });
+    : new GoogleAuth({ scopes: SCOPES });
 
   return {
-    api: google.sheets({ version: "v4", auth }),
+    api: sheets({ version: "v4", auth }),
     spreadsheetId: config.spreadsheetId,
     transactionsSheet: config.transactionsSheet,
     configSheet: config.configSheet,
