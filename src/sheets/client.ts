@@ -1,5 +1,6 @@
-import { google, type sheets_v4 } from "googleapis";
-import type { Config } from "../config.js";
+import { sheets, type sheets_v4 } from "@googleapis/sheets";
+import { GoogleAuth, JWT } from "google-auth-library";
+import type { SheetsConfig } from "../config.js";
 
 export interface SheetsContext {
   api: sheets_v4.Sheets;
@@ -8,15 +9,36 @@ export interface SheetsContext {
   configSheet: string;
 }
 
-export function createSheetsContext(config: Config): SheetsContext {
-  const auth = new google.auth.JWT({
-    email: config.serviceAccount.client_email,
-    key: config.serviceAccount.private_key,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-  });
+/**
+ * The Sheets-only package, not the `googleapis` umbrella, is deliberate: the
+ * umbrella pulls in every Google API and costs ~1.2s to import against ~0.08s
+ * for this one. On a function that scales to zero that lands on every cold
+ * start, and a slow first response had users double-tapping buttons.
+ */
+const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
+
+/**
+ * Two credential paths, and the one without a key file is the better one.
+ *
+ * On Google Cloud, attaching the service account to the function means
+ * Application Default Credentials resolve from the metadata server: no private
+ * key is stored anywhere, so there is nothing to leak, commit, or rotate. That
+ * is the deployed path, and why GOOGLE_SERVICE_ACCOUNT_JSON is optional.
+ *
+ * The explicit JWT is the fallback for running off-cloud — a laptop, a Pi, a
+ * container elsewhere — where no metadata server exists.
+ */
+export function createSheetsContext(config: SheetsConfig): SheetsContext {
+  const auth = config.serviceAccount
+    ? new JWT({
+        email: config.serviceAccount.client_email,
+        key: config.serviceAccount.private_key,
+        scopes: SCOPES,
+      })
+    : new GoogleAuth({ scopes: SCOPES });
 
   return {
-    api: google.sheets({ version: "v4", auth }),
+    api: sheets({ version: "v4", auth }),
     spreadsheetId: config.spreadsheetId,
     transactionsSheet: config.transactionsSheet,
     configSheet: config.configSheet,
@@ -84,7 +106,10 @@ export function describeSheetsError(error: unknown): string {
     return "No spreadsheet with that SPREADSHEET_ID. Check the id in the sheet's URL.";
   }
   if (status === 401) {
-    return "Google rejected the service account key. Check GOOGLE_SERVICE_ACCOUNT_JSON.";
+    return (
+      "Google rejected the credentials. Off-cloud, check GOOGLE_SERVICE_ACCOUNT_JSON; " +
+      "on Google Cloud, check that a service account is attached to the function."
+    );
   }
   return `Google Sheets error: ${message}`;
 }

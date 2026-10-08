@@ -12,12 +12,13 @@ export const HEADERS = [
   "category",
   "description",
   "merchant",
+  "account",
   "payer",
   "source",
   "raw_text",
 ] as const;
 
-const LAST_COLUMN = "K";
+const LAST_COLUMN = "L";
 /** 1-based column of `category`, used when correcting one in place. */
 const CATEGORY_COLUMN = "F";
 
@@ -38,6 +39,7 @@ export function rowToValues(row: LedgerRow): (string | number)[] {
     row.category,
     row.description,
     row.merchant ?? "",
+    row.account ?? "",
     row.payer,
     row.source,
     row.rawText,
@@ -86,10 +88,11 @@ export function valuesToRow(values: unknown[]): LedgerRow | null {
   const amountIdr = coerceAmount(values[4]);
 
   if (id === "" || date === null || amountIdr === null) return null;
-  if (type !== "expense" && type !== "income") return null;
+  if (type !== "expense" && type !== "income" && type !== "transfer") return null;
 
   const merchant = String(values[7] ?? "").trim();
-  const source = String(values[9] ?? "").trim() === "photo" ? "photo" : "text";
+  const account = String(values[8] ?? "").trim();
+  const source = String(values[10] ?? "").trim() === "photo" ? "photo" : "text";
 
   return {
     id,
@@ -100,9 +103,10 @@ export function valuesToRow(values: unknown[]): LedgerRow | null {
     category: String(values[5] ?? "").trim() || "Lain-lain",
     description: String(values[6] ?? "").trim(),
     merchant: merchant === "" ? null : merchant,
-    payer: String(values[8] ?? "").trim(),
+    account: account === "" ? null : account,
+    payer: String(values[9] ?? "").trim(),
     source,
-    rawText: String(values[10] ?? ""),
+    rawText: String(values[11] ?? ""),
     confidence: "high",
   };
 }

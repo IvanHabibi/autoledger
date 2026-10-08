@@ -1,0 +1,15 @@
+{
+  // Emit configuration for deployment. The base config is typecheck-only
+  // (noEmit), and Cloud Functions runs plain `node`, which cannot load .ts —
+  // so the deployed artifact has to be compiled JavaScript. Only src is built;
+  // tests and the one-off scripts never ship.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "sourceMap": true,
+    "declaration": false
+  },
+  "include": ["src/**/*.ts"]
+}

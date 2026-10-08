@@ -19,6 +19,7 @@ const ROW: LedgerRow = {
   category: "Belanja Harian",
   description: "beli beras",
   merchant: "Indomaret",
+  account: "BCA",
   payer: "Ivan",
   source: "text",
   rawText: "beli beras 50rb di indomaret",

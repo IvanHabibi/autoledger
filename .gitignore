@@ -9,6 +9,16 @@ dist/
 service-account*.json
 credentials*.json
 gcp-key*.json
+# Google downloads service account keys as <project-id>-<keyid>.json, which none
+# of the patterns above match. Rather than chase naming conventions, ignore every
+# JSON at the repo root and allow back the three that belong here: a stray
+# credential is then ignored by default instead of one `git add -A` from being
+# published. A new root-level config file must be added to this allowlist.
+/*.json
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+!/tsconfig.build.json
 
 # Tooling noise
 .DS_Store
