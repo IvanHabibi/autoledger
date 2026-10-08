@@ -29,7 +29,12 @@ const SheetsEnvSchema = z.object({
 const EnvSchema = SheetsEnvSchema.extend({
   TELEGRAM_BOT_TOKEN: z.string().min(10, "looks too short to be a bot token"),
   ALLOWED_TELEGRAM_IDS: z.string().min(1),
-  ANTHROPIC_API_KEY: z.string().min(10),
+  // Which provider parses messages. Both run the same prompts and validation,
+  // so this is a measured choice: run `npm run test:parse` against each.
+  LLM_PROVIDER: z.enum(["anthropic", "openrouter"]).default("anthropic"),
+  OPENROUTER_API_KEY: z.string().min(10).optional(),
+  OPENROUTER_MODEL: z.string().default("openrouter/free"),
+  ANTHROPIC_API_KEY: z.string().min(10).optional(),
   CLAUDE_MODEL: z.string().default("claude-opus-5"),
   // Required in webhook mode: the function URL is public and unauthenticated,
   // so this shared secret is what proves a request really came from Telegram.
@@ -49,8 +54,11 @@ export interface SheetsConfig {
 export interface Config extends SheetsConfig {
   telegramBotToken: string;
   allowedTelegramIds: Set<number>;
-  anthropicApiKey: string;
+  anthropicApiKey: string | null;
   claudeModel: string;
+  llmProvider: "anthropic" | "openrouter";
+  openRouterApiKey: string | null;
+  openRouterModel: string;
   webhookSecret: string | null;
 }
 
@@ -154,12 +162,27 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (!parsed.success) describeIssues(parsed.error, env);
   const e = parsed.data;
 
+  // Each provider needs its own key. Checking here means a misconfiguration
+  // surfaces at startup with a readable message instead of when someone is
+  // trying to record a purchase.
+  if (e.LLM_PROVIDER === "anthropic" && !e.ANTHROPIC_API_KEY) {
+    throw new Error(
+      "LLM_PROVIDER is anthropic (the default) but ANTHROPIC_API_KEY is not set.",
+    );
+  }
+  if (e.LLM_PROVIDER === "openrouter" && !e.OPENROUTER_API_KEY) {
+    throw new Error("LLM_PROVIDER is openrouter but OPENROUTER_API_KEY is not set.");
+  }
+
   return {
     ...toSheetsConfig(e),
     telegramBotToken: e.TELEGRAM_BOT_TOKEN,
     allowedTelegramIds: parseAllowedIds(e.ALLOWED_TELEGRAM_IDS),
-    anthropicApiKey: e.ANTHROPIC_API_KEY,
+    anthropicApiKey: e.ANTHROPIC_API_KEY ?? null,
     claudeModel: e.CLAUDE_MODEL,
+    llmProvider: e.LLM_PROVIDER,
+    openRouterApiKey: e.OPENROUTER_API_KEY ?? null,
+    openRouterModel: e.OPENROUTER_MODEL,
     webhookSecret: e.TELEGRAM_WEBHOOK_SECRET ?? null,
   };
 }

@@ -12,13 +12,35 @@
  */
 import "dotenv/config";
 import { describe, expect, it } from "vitest";
-import { Parser } from "../../src/parse/claude.js";
+import { AnthropicParser } from "../../src/parse/claude.js";
+import { OpenRouterParser } from "../../src/parse/openrouter.js";
+import type { Parser } from "../../src/parse/provider.js";
 import { DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES } from "../../src/sheets/config.js";
 import { addDays, todayInTimeZone } from "../../src/util/date.js";
 
-const apiKey = process.env.ANTHROPIC_API_KEY;
+/**
+ * Runs against whichever provider is configured, so the same cases score both:
+ *
+ *   npm run test:parse                          # LLM_PROVIDER from .env
+ *   LLM_PROVIDER=openrouter npm run test:parse  # compare a free model
+ */
+const PROVIDER = process.env.LLM_PROVIDER === "openrouter" ? "openrouter" : "anthropic";
+const apiKey =
+  PROVIDER === "openrouter" ? process.env.OPENROUTER_API_KEY : process.env.ANTHROPIC_API_KEY;
+const MODEL =
+  PROVIDER === "openrouter"
+    ? (process.env.OPENROUTER_MODEL ?? "openrouter/free")
+    : (process.env.CLAUDE_MODEL ?? "claude-opus-5");
+const KEY_NAME = PROVIDER === "openrouter" ? "OPENROUTER_API_KEY" : "ANTHROPIC_API_KEY";
 const TIME_ZONE = "Asia/Jakarta";
-const PER_CASE_TIMEOUT_MS = 90_000;
+// Free models queue behind rate limits, so they need more room than Claude did.
+const PER_CASE_TIMEOUT_MS = PROVIDER === "openrouter" ? 180_000 : 90_000;
+
+function makeParser(): Parser {
+  return PROVIDER === "openrouter"
+    ? new OpenRouterParser({ apiKey: apiKey ?? "", model: MODEL, timeZone: TIME_ZONE })
+    : new AnthropicParser({ apiKey: apiKey ?? "", model: MODEL, timeZone: TIME_ZONE });
+}
 
 /**
  * A real, always-running assertion rather than a console warning — vitest
@@ -30,11 +52,11 @@ const PER_CASE_TIMEOUT_MS = 90_000;
  * `npm test` runs test/unit only, so this never breaks the keyless path.
  */
 describe("live eval preconditions", () => {
-  it("has ANTHROPIC_API_KEY set", () => {
+  it(`has ${KEY_NAME} set (provider: ${PROVIDER}, model: ${MODEL})`, () => {
     expect(
       apiKey,
-      "ANTHROPIC_API_KEY is not set, so every case below was skipped and the " +
-        "parser was NOT verified. Put it in .env or export it, then re-run.",
+      `${KEY_NAME} is not set, so every case below was skipped and the parser was ` +
+        "NOT verified. Put it in .env or export it, then re-run.",
     ).toBeTruthy();
   });
 });
@@ -50,11 +72,7 @@ interface TransactionCase {
 }
 
 describe.skipIf(!apiKey)("parser (live API)", () => {
-  const parser = new Parser({
-    apiKey: apiKey ?? "",
-    model: process.env.CLAUDE_MODEL ?? "claude-opus-5",
-    timeZone: TIME_ZONE,
-  });
+  const parser = makeParser();
   const today = todayInTimeZone(TIME_ZONE);
   const yesterday = addDays(today, -1);
   const config = { categories: DEFAULT_CATEGORIES, accounts: DEFAULT_ACCOUNTS };

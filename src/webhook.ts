@@ -12,7 +12,7 @@ import { webhookCallback } from "grammy";
 import { createApp } from "./bot/app.js";
 import { createBot } from "./bot/index.js";
 import { loadConfig } from "./config.js";
-import { Parser } from "./parse/claude.js";
+import { createParser, describeProvider } from "./parse/index.js";
 import { createSheetsContext } from "./sheets/client.js";
 
 /**
@@ -46,11 +46,7 @@ const ready = (async () => {
   const app = createApp({
     config,
     sheets: createSheetsContext(config),
-    parser: new Parser({
-      apiKey: config.anthropicApiKey,
-      model: config.claudeModel,
-      timeZone: config.timeZone,
-    }),
+    parser: createParser(config),
   });
 
   const bot = createBot(app);
@@ -60,7 +56,7 @@ const ready = (async () => {
 
   console.log(
     `[boot] webhook ready as @${bot.botInfo.username} ` +
-      `model=${config.claudeModel} credentials=${
+      `parser=${describeProvider(config)} credentials=${
         config.serviceAccount ? "service-account-key" : "ADC"
       }`,
   );

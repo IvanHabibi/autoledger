@@ -1,5 +1,5 @@
 import type { Bot, Context } from "grammy";
-import { detectImageMediaType, type ReceiptImage } from "../../parse/claude.js";
+import { detectImageMediaType, type ReceiptImage } from "../../parse/provider.js";
 import { readSheetConfig } from "../../sheets/config.js";
 import type { App } from "../app.js";
 import { escapeHtml } from "../format.js";

@@ -7,26 +7,17 @@ import Anthropic, {
   RateLimitError,
 } from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import {
+  ParseFailure,
+  fallbackCategoryOf,
+  type ParseConfig,
+  type Parser,
+  type ReceiptImage,
+} from "./provider.js";
 import type { Intent } from "../types.js";
 import { todayInTimeZone } from "../util/date.js";
 import { buildMessagePrompt, buildReceiptPrompt, type PromptContext } from "./prompt.js";
 import { buildIntentSchema, toIntent } from "./schema.js";
-
-/** The image types the Messages API accepts. */
-export type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
-
-export interface ReceiptImage {
-  base64: string;
-  mediaType: ImageMediaType;
-}
-
-/** Raised when the model answered but the answer was unusable. */
-export class ParseFailure extends Error {
-  constructor(message: string, cause?: unknown) {
-    super(message, { cause });
-    this.name = "ParseFailure";
-  }
-}
 
 /**
  * A cap is not a charge — you pay for tokens generated, not for the ceiling —
@@ -58,17 +49,7 @@ export interface ParserOptions {
   timeZone: string;
 }
 
-/**
- * What the parser needs from the Config tab. Declared with readonly arrays
- * because nothing here mutates them — a `SheetConfig` satisfies it as-is, and so
- * does a literal list of defaults in a test.
- */
-export interface ParseConfig {
-  categories: readonly string[];
-  accounts: readonly string[];
-}
-
-export class Parser {
+export class AnthropicParser implements Parser {
   private readonly client: Anthropic;
   private readonly model: string;
   private readonly timeZone: string;
@@ -190,15 +171,6 @@ export class Parser {
   }
 }
 
-/** Prefer an explicit catch-all category if the household defined one. */
-export function fallbackCategoryOf(categories: readonly string[]): string {
-  const preferred = ["Lain-lain", "Other", "Lainnya", "Uncategorized"];
-  for (const name of preferred) {
-    const hit = categories.find((c) => c.toLowerCase() === name.toLowerCase());
-    if (hit) return hit;
-  }
-  return categories[categories.length - 1]!;
-}
 
 /**
  * Most specific first. The BadRequestError branch matters more than it looks:
@@ -225,27 +197,4 @@ function describeApiError(error: unknown): string {
     return `Anthropic returned ${error.status ?? "an error"}: ${error.message}`;
   }
   return error instanceof Error ? error.message : "Unknown error calling the Anthropic API.";
-}
-
-/** Sniff the real image type; Telegram sends JPEG but forwarded files vary. */
-export function detectImageMediaType(bytes: Uint8Array): ImageMediaType {
-  if (bytes.length >= 8) {
-    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
-      return "image/png";
-    }
-    if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return "image/gif";
-    if (
-      bytes[0] === 0x52 &&
-      bytes[1] === 0x49 &&
-      bytes[2] === 0x46 &&
-      bytes[3] === 0x46 &&
-      bytes[8] === 0x57 &&
-      bytes[9] === 0x45 &&
-      bytes[10] === 0x42 &&
-      bytes[11] === 0x50
-    ) {
-      return "image/webp";
-    }
-  }
-  return "image/jpeg";
 }

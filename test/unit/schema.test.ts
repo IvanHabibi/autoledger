@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildIntentSchema, toIntent, type IntentWire } from "../../src/parse/schema.js";
-import { fallbackCategoryOf, supportsEffort } from "../../src/parse/claude.js";
+import { supportsEffort } from "../../src/parse/claude.js";
+import { fallbackCategoryOf } from "../../src/parse/provider.js";
 
 const CATEGORIES = ["Makanan & Minuman", "Transportasi", "Gaji", "Lain-lain"];
 

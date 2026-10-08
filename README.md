@@ -206,6 +206,41 @@ if access were granted there, anyone able to edit the spreadsheet could grant it
 to themselves. An access-control list belongs with the secrets, not inside the
 data it protects.
 
+## Choosing a model provider
+
+`LLM_PROVIDER` selects who parses messages: `anthropic` or `openrouter`. Both run
+the same prompts, the same wire schema and the same validation, so the choice is
+measurable rather than a matter of taste — run `npm run test:parse` against each.
+
+Measured on the 33-case eval:
+
+| Provider / model | Eval | Per entry | Cost |
+|---|---|---|---|
+| `anthropic` / `claude-sonnet-5` | **33/33** | 2.7s | $3.43/mo |
+| `openrouter` / `openrouter/free` | **20/33** | 42s | free |
+
+Every OpenRouter failure takes the same form: the model returns schema-valid
+JSON full of nulls, so `toIntent` reports `unclear` and the entry is rejected
+rather than written wrongly. The failures are not exotic — `beli beras 50rb di
+indomaret` is among them.
+
+Two things learned the hard way, recorded so they are not rediscovered:
+
+- **`openrouter/free` is a router, not a model.** It picks a different
+  underlying model per request, so the same message can parse correctly once and
+  fail the next time. Eval results are not reproducible run to run.
+- **Retries barely help.** Three attempts scored the same as one, which means
+  failures are correlated per input rather than independent: some phrasings
+  defeat the free models consistently. Attempts are capped at two with a 20s
+  ceiling each, because the value was latency, not accuracy — and latency here
+  threatens the sheet write (see Deployment).
+
+Switching back costs one variable, since both keys stay mounted:
+
+```bash
+gcloud functions deploy autoledger --region asia-southeast2 --gen2   --update-env-vars LLM_PROVIDER=anthropic --project <project>
+```
+
 ## Why there are no balances
 
 Deliberately, the ledger tracks **flows** (what came in, what went out) and never

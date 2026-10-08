@@ -2,7 +2,7 @@ import { createApp } from "./bot/app.js";
 import { BOT_COMMANDS, createBot } from "./bot/index.js";
 import { loadConfig } from "./config.js";
 import type { SheetConfig } from "./types.js";
-import { Parser } from "./parse/claude.js";
+import { createParser, describeProvider } from "./parse/index.js";
 import {
   SheetStructureError,
   createSheetsContext,
@@ -29,11 +29,7 @@ async function main(): Promise<void> {
   const config = loadConfig();
 
   const sheets = createSheetsContext(config);
-  const parser = new Parser({
-    apiKey: config.anthropicApiKey,
-    model: config.claudeModel,
-    timeZone: config.timeZone,
-  });
+  const parser = createParser(config);
 
   // Prove the sheet is reachable and shaped correctly before accepting any
   // messages. A permissions mistake should surface here, not halfway through
@@ -64,7 +60,7 @@ async function main(): Promise<void> {
   process.once("SIGTERM", () => stop("SIGTERM"));
 
   console.log(
-    `[boot] model=${config.claudeModel} tz=${config.timeZone} ` +
+    `[boot] parser=${describeProvider(config)} tz=${config.timeZone} ` +
       `allowed=${config.allowedTelegramIds.size} account(s)`,
   );
 

@@ -20,6 +20,8 @@ SPREADSHEET_ID="${SPREADSHEET_ID:?set SPREADSHEET_ID or export it from .env}"
 ALLOWED_TELEGRAM_IDS="${ALLOWED_TELEGRAM_IDS:?set ALLOWED_TELEGRAM_IDS}"
 TIMEZONE="${TIMEZONE:-Asia/Jakarta}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5}"
+LLM_PROVIDER="${LLM_PROVIDER:-anthropic}"
+OPENROUTER_MODEL="${OPENROUTER_MODEL:-openrouter/free}"
 
 echo "==> Enabling the APIs this needs (idempotent)"
 gcloud services enable \
@@ -31,7 +33,7 @@ gcloud services enable \
   --project "$PROJECT"
 
 echo "==> Letting the function's service account read the secrets"
-for SECRET in anthropic-api-key telegram-bot-token telegram-webhook-secret; do
+for SECRET in anthropic-api-key openrouter-api-key telegram-bot-token telegram-webhook-secret; do
   gcloud secrets add-iam-policy-binding "$SECRET" \
     --member "serviceAccount:${SERVICE_ACCOUNT}" \
     --role roles/secretmanager.secretAccessor \
@@ -67,8 +69,8 @@ gcloud functions deploy "$FUNCTION" \
   --timeout 120s \
   --memory 512Mi \
   --max-instances 3 \
-  --set-env-vars "^|^SPREADSHEET_ID=${SPREADSHEET_ID}|ALLOWED_TELEGRAM_IDS=${ALLOWED_TELEGRAM_IDS}|TIMEZONE=${TIMEZONE}|CLAUDE_MODEL=${CLAUDE_MODEL}" \
-  --set-secrets "ANTHROPIC_API_KEY=anthropic-api-key:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token:latest,TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret:latest" \
+  --set-env-vars "^|^SPREADSHEET_ID=${SPREADSHEET_ID}|ALLOWED_TELEGRAM_IDS=${ALLOWED_TELEGRAM_IDS}|TIMEZONE=${TIMEZONE}|CLAUDE_MODEL=${CLAUDE_MODEL}|LLM_PROVIDER=${LLM_PROVIDER}|OPENROUTER_MODEL=${OPENROUTER_MODEL}" \
+  --set-secrets "ANTHROPIC_API_KEY=anthropic-api-key:latest,OPENROUTER_API_KEY=openrouter-api-key:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token:latest,TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret:latest" \
   --set-build-env-vars GOOGLE_NODE_RUN_SCRIPTS= \
   --project "$PROJECT"
 
