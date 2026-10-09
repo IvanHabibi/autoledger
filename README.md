@@ -218,6 +218,21 @@ Measured on the 33-case eval:
 |---|---|---|---|
 | `anthropic` / `claude-sonnet-5` | **33/33** | 2.7s | $3.43/mo |
 | `openrouter` / `openrouter/free` | **20/33** | 42s | free |
+| `openrouter` / `nvidia/nemotron-3-super-120b-a12b:free` | 6/8 screen | 7.5s | free |
+
+Screened with `npx tsx scripts/screen-models.ts <model-id> ...` — eight cases in
+about 90 seconds, for deciding which models are worth a full eval at all. It
+reports what was wrong rather than a bare count, and treats `unclear` as a
+failure, which is what makes a flaky model look reliable otherwise.
+`poolside/laguna-s-2.1:free` scored 0/8 there: it advertises
+`structured_outputs: false` and never produced a schema-conformant answer.
+
+**Receipt photos do not go to the free model.** The free models that parse
+Indonesian well are text-only, so `createParser` splits by modality: text
+through OpenRouter, photos through Anthropic. Photos are a small share of
+entries, so this keeps the cost saving without dropping the feature. With no
+`ANTHROPIC_API_KEY` set, photos fail with a message naming that setting rather
+than looking like a bad photograph.
 
 Every OpenRouter failure takes the same form: the model returns schema-valid
 JSON full of nulls, so `toIntent` reports `unclear` and the entry is rejected
