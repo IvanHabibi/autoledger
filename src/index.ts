@@ -1,24 +1,35 @@
 import { createApp } from "./bot/app.js";
 import { BOT_COMMANDS, createBot } from "./bot/index.js";
 import { loadConfig } from "./config.js";
-import { Parser } from "./parse/claude.js";
+import type { SheetConfig } from "./types.js";
+import { createParser, describeProvider } from "./parse/index.js";
 import {
   SheetStructureError,
   createSheetsContext,
   describeSheetsError,
   getSheetId,
 } from "./sheets/client.js";
-import { readSheetConfig } from "./sheets/config.js";
+import { membersMissingFromAllowlist, readSheetConfig } from "./sheets/config.js";
+
+/** Naming someone in the Config tab does not grant them access — say so loudly
+ *  rather than leaving them silently ignored. */
+function warnAboutUnauthorizedMembers(
+  sheetConfig: SheetConfig,
+  allowedIds: ReadonlySet<number>,
+): void {
+  for (const { id, name } of membersMissingFromAllowlist(sheetConfig, allowedIds)) {
+    console.warn(
+      `[boot] ⚠️  "${name}" (${id}) is mapped in the Config tab but is NOT in ` +
+        "ALLOWED_TELEGRAM_IDS, so the bot will ignore them. Add the id there and restart.",
+    );
+  }
+}
 
 async function main(): Promise<void> {
   const config = loadConfig();
 
   const sheets = createSheetsContext(config);
-  const parser = new Parser({
-    apiKey: config.anthropicApiKey,
-    model: config.claudeModel,
-    timeZone: config.timeZone,
-  });
+  const parser = createParser(config);
 
   // Prove the sheet is reachable and shaped correctly before accepting any
   // messages. A permissions mistake should surface here, not halfway through
@@ -30,6 +41,7 @@ async function main(): Promise<void> {
       `[boot] sheet ok — ${sheetConfig.categories.length} categories, ` +
         `${sheetConfig.members.size} member(s) mapped`,
     );
+    warnAboutUnauthorizedMembers(sheetConfig, config.allowedTelegramIds);
   } catch (error) {
     if (error instanceof SheetStructureError) throw error;
     throw new Error(describeSheetsError(error));
@@ -48,7 +60,7 @@ async function main(): Promise<void> {
   process.once("SIGTERM", () => stop("SIGTERM"));
 
   console.log(
-    `[boot] model=${config.claudeModel} tz=${config.timeZone} ` +
+    `[boot] parser=${describeProvider(config)} tz=${config.timeZone} ` +
       `allowed=${config.allowedTelegramIds.size} account(s)`,
   );
 

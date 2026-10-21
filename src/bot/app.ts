@@ -1,6 +1,6 @@
 import type { User } from "grammy/types";
 import type { Config } from "../config.js";
-import type { Parser } from "../parse/claude.js";
+import type { Parser } from "../parse/provider.js";
 import type { SheetsContext } from "../sheets/client.js";
 import { RecentEntries } from "./recent.js";
 

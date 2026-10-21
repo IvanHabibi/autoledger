@@ -42,8 +42,14 @@ export function formatRange(startDate: string, endDate: string): string {
     : `${formatDateId(startDate)} – ${formatDateId(endDate)}`;
 }
 
+const HEADINGS: Record<LedgerRow["type"], string> = {
+  income: "✅ Pemasukan dicatat",
+  expense: "✅ Pengeluaran dicatat",
+  transfer: "🔄 Pindah dana dicatat",
+};
+
 export function renderEntry(row: LedgerRow): string {
-  const heading = row.type === "income" ? "✅ Pemasukan dicatat" : "✅ Pengeluaran dicatat";
+  const heading = HEADINGS[row.type];
   const lines = [
     `<b>${heading}</b>`,
     `<b>${escapeHtml(formatIdr(row.amountIdr))}</b> · ${escapeHtml(row.category)}`,
@@ -54,9 +60,13 @@ export function renderEntry(row: LedgerRow): string {
     : escapeHtml(row.description);
   if (detail.trim() !== "") lines.push(detail);
 
-  lines.push(
-    `<i>${formatDateId(row.date)} · ${escapeHtml(row.payer)}</i>`,
-  );
+  const meta = [formatDateId(row.date), row.payer];
+  if (row.account) meta.push(row.account);
+  lines.push(`<i>${escapeHtml(meta.join(" · "))}</i>`);
+
+  if (row.type === "transfer") {
+    lines.push("", "<i>Tidak dihitung sebagai pengeluaran — uangnya cuma pindah.</i>");
+  }
 
   if (row.confidence === "low") {
     lines.push("", "⚠️ <i>Kurang yakin dengan nominal atau tanggalnya — cek dulu ya.</i>");
@@ -75,7 +85,13 @@ export function renderUndone(row: LedgerRow | null): string {
 
 export function renderReport(query: QuerySpec, result: AggregateResult): string {
   const what =
-    query.scope === "income" ? "Pemasukan" : query.scope === "expense" ? "Pengeluaran" : "Mutasi";
+    query.scope === "income"
+      ? "Pemasukan"
+      : query.scope === "expense"
+        ? "Pengeluaran"
+        : query.scope === "transfer"
+          ? "Pindah dana"
+          : "Mutasi";
 
   const lines = [
     `📊 <b>${what} ${escapeHtml(query.label)}</b>`,
@@ -116,6 +132,16 @@ export function renderSummary(summary: Summary): string {
     `<i>${summary.count} transaksi</i>`,
   ];
 
+  // Shown so it is visible that the movement was captured, and visible that it
+  // is deliberately not part of the figures above.
+  if (summary.transferCount > 0) {
+    lines.push(
+      "",
+      `<i>Pindah antar rekening: ${escapeHtml(formatIdr(summary.transferred))} ` +
+        `(${summary.transferCount}×, di luar hitungan di atas)</i>`,
+    );
+  }
+
   if (summary.expenseByCategory.length > 0) {
     lines.push("", "<b>Pengeluaran terbesar</b>");
     for (const group of summary.expenseByCategory.slice(0, 8)) {
@@ -134,7 +160,14 @@ export const HELP_TEXT = [
   "• <code>bensin 100k</code>",
   "• <code>gaji 15jt</code>",
   "• <code>kemarin makan siang 45rb</code>",
+  "• <code>bayar listrik 350rb pake bca</code>",
   "Atau kirim <b>foto struk</b>, nanti dibaca otomatis.",
+  "",
+  "<b>Pindah dana</b> — uang yang cuma berpindah, bukan pengeluaran:",
+  "• <code>transfer ke rekening mandiri 1jt</code>",
+  "• <code>tarik tunai 500rb</code>",
+  "• <code>top up gopay 200rb</code>",
+  "Ini dicatat terpisah dan tidak menambah total pengeluaran.",
   "",
   "<b>Bertanya</b>:",
   "• <code>berapa pengeluaran makanan bulan ini?</code>",

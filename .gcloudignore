@@ -1,0 +1,31 @@
+# What gcloud uploads as function source.
+#
+# Written explicitly rather than relying on gcloud's fallback to .gitignore:
+# this directory holds a real service-account key and a .env during local
+# development, and neither should ever reach a build.
+.git
+.gitignore
+node_modules
+
+# Secrets — these come from Secret Manager and the attached service account,
+# never from the uploaded source.
+.env
+.env.*
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.build.json
+
+# Not needed at runtime.
+test
+scripts
+src
+README.md
+Dockerfile
+.dockerignore
+deploy.sh
+
+# dist IS uploaded: it is the compiled entrypoint that package.json "main"
+# points at, and deploy.sh rebuilds it immediately before deploying.
+!dist

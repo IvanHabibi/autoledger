@@ -1,5 +1,5 @@
 import { GrammyError, HttpError, type Context, type Middleware } from "grammy";
-import { ParseFailure } from "../parse/claude.js";
+import { ParseFailure } from "../parse/provider.js";
 import { describeSheetsError } from "../sheets/client.js";
 
 function isGoogleError(error: unknown): boolean {

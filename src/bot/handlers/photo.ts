@@ -1,5 +1,5 @@
 import type { Bot, Context } from "grammy";
-import { detectImageMediaType, type ReceiptImage } from "../../parse/claude.js";
+import { detectImageMediaType, type ReceiptImage } from "../../parse/provider.js";
 import { readSheetConfig } from "../../sheets/config.js";
 import type { App } from "../app.js";
 import { escapeHtml } from "../format.js";
@@ -72,7 +72,7 @@ export function registerPhotoHandler(bot: Bot, app: App): void {
 
     const caption = ctx.message.caption?.trim() ?? null;
     const sheetConfig = await readSheetConfig(app.sheets);
-    const intent = await app.parser.parseReceipt(image, caption, sheetConfig.categories);
+    const intent = await app.parser.parseReceipt(image, caption, sheetConfig);
 
     if (intent.kind === "transaction") {
       await recordTransaction(

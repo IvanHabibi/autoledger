@@ -1,10 +1,26 @@
-import type { Bot } from "grammy";
+import { GrammyError, type Bot } from "grammy";
 import { readSheetConfig } from "../../sheets/config.js";
 import { deleteTransactionById, updateCategoryById } from "../../sheets/transactions.js";
 import type { App } from "../app.js";
 import { decodeCallback } from "../callback-data.js";
 import { renderEntry, renderUndone } from "../format.js";
 import { categoryKeyboard, entryKeyboard } from "../keyboards.js";
+
+/**
+ * Telegram rejects an edit that would leave the message unchanged.
+ *
+ * That happens routinely here rather than exceptionally. A cold start takes
+ * several seconds, so a button feels dead and gets tapped twice: the second tap
+ * asks for the keyboard the first one already applied. Choosing the category a
+ * row already has does the same thing. In each case the state the user asked
+ * for is the state they now have, so it is a no-op — not something to put a red
+ * warning in front of them for, which is what it used to do.
+ */
+export function isUnchangedEdit(error: unknown): boolean {
+  return (
+    error instanceof GrammyError && error.description.includes("message is not modified")
+  );
+}
 
 export function registerCallbackHandler(bot: Bot, app: App): void {
   bot.on("callback_query:data", async (ctx) => {
@@ -78,6 +94,11 @@ export function registerCallbackHandler(bot: Bot, app: App): void {
         }
       }
     } catch (error) {
+      if (isUnchangedEdit(error)) {
+        // The edit was a no-op: whatever was asked for is already on screen.
+        await ctx.answerCallbackQuery().catch(() => {});
+        return;
+      }
       // An unanswered callback query leaves the button spinning for a minute,
       // which reads as a hung bot. Release it, then let the error boundary log
       // and explain. A double-answer is harmless and ignored.

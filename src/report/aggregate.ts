@@ -8,9 +8,18 @@ import { isWithin, monthKey } from "../util/date.js";
  * worse than no ledger, and language models are not adding machines.
  */
 
+/**
+ * `"both"` is income and expense, NOT everything: a transfer is money that only
+ * moved between our own accounts, so counting it in an unscoped total would
+ * report spending that never happened. Ask for it explicitly to see it.
+ */
+export function inScope(type: LedgerRow["type"], scope: QuerySpec["scope"]): boolean {
+  return scope === "both" ? type !== "transfer" : type === scope;
+}
+
 export function matchesQuery(row: LedgerRow, query: QuerySpec): boolean {
   if (!isWithin(row.date, query.startDate, query.endDate)) return false;
-  if (query.scope !== "both" && row.type !== query.scope) return false;
+  if (!inScope(row.type, query.scope)) return false;
 
   if (query.categories.length > 0) {
     const wanted = query.categories.map((c) => c.toLowerCase());
@@ -19,7 +28,7 @@ export function matchesQuery(row: LedgerRow, query: QuerySpec): boolean {
 
   if (query.keyword) {
     const needle = query.keyword.toLowerCase();
-    const haystack = `${row.description} ${row.merchant ?? ""} ${row.rawText}`.toLowerCase();
+    const haystack = `${row.description} ${row.merchant ?? ""} ${row.account ?? ""} ${row.rawText}`.toLowerCase();
     if (!haystack.includes(needle)) return false;
   }
 
@@ -34,6 +43,8 @@ function groupKeyOf(row: LedgerRow, groupBy: QuerySpec["groupBy"]): string {
       return monthKey(row.date);
     case "payer":
       return row.payer || "(tanpa nama)";
+    case "account":
+      return row.account || "(tanpa akun)";
     case "none":
       return "total";
   }
@@ -70,13 +81,22 @@ export interface Summary {
   endDate: string;
   income: number;
   expense: number;
-  /** Positive means the household took in more than it spent. */
+  /** Money moved between our own accounts. Reported, but in neither total above. */
+  transferred: number;
+  transferCount: number;
+  /** Positive means the household took in more than it spent. Transfers excluded. */
   net: number;
   count: number;
   expenseByCategory: AggregateGroup[];
 }
 
-/** The /summary command: both directions of money over one period. */
+/**
+ * The /summary command: both directions of money over one period.
+ *
+ * The three types are handled explicitly rather than as "income, or else
+ * expense". That earlier shape is what silently counted every transfer as
+ * spending — an ATM withdrawal would show up as money gone.
+ */
 export function summarize(
   rows: readonly LedgerRow[],
   startDate: string,
@@ -84,6 +104,8 @@ export function summarize(
 ): Summary {
   let income = 0;
   let expense = 0;
+  let transferred = 0;
+  let transferCount = 0;
   let count = 0;
   const buckets = new Map<string, AggregateGroup>();
 
@@ -91,18 +113,27 @@ export function summarize(
     if (!isWithin(row.date, startDate, endDate)) continue;
     count += 1;
 
-    if (row.type === "income") {
-      income += row.amountIdr;
-      continue;
-    }
+    switch (row.type) {
+      case "income":
+        income += row.amountIdr;
+        break;
 
-    expense += row.amountIdr;
-    const bucket = buckets.get(row.category);
-    if (bucket) {
-      bucket.total += row.amountIdr;
-      bucket.count += 1;
-    } else {
-      buckets.set(row.category, { key: row.category, total: row.amountIdr, count: 1 });
+      case "transfer":
+        transferred += row.amountIdr;
+        transferCount += 1;
+        break;
+
+      case "expense": {
+        expense += row.amountIdr;
+        const bucket = buckets.get(row.category);
+        if (bucket) {
+          bucket.total += row.amountIdr;
+          bucket.count += 1;
+        } else {
+          buckets.set(row.category, { key: row.category, total: row.amountIdr, count: 1 });
+        }
+        break;
+      }
     }
   }
 
@@ -111,6 +142,8 @@ export function summarize(
     endDate,
     income,
     expense,
+    transferred,
+    transferCount,
     net: income - expense,
     count,
     expenseByCategory: [...buckets.values()].sort((a, b) => b.total - a.total),

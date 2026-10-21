@@ -1,0 +1,4 @@
+# Shell scripts must stay LF whatever the checkout platform: a bash script with
+# CRLF fails on Linux with "\r: command not found", and deploy.sh is meant to run
+# in WSL, Cloud Shell and CI as well as Git Bash on Windows.
+*.sh text eol=lf
