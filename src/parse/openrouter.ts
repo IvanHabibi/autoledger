@@ -125,10 +125,69 @@ export function extractJsonObject(raw: string): string | null {
   return null;
 }
 
+/**
+ * Rewrite `type: ["string", "null"]` as `anyOf: [{type:"string"},{type:"null"}]`.
+ *
+ * zod emits the type-array form, which some providers' schema parsers reject
+ * outright — Minimax answers `invalid params, Mismatch type string with value
+ * array`. The anyOf form expresses the same thing and is accepted more widely.
+ */
+export function toAnyOfNullable(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(toAnyOfNullable);
+  if (!node || typeof node !== "object") return node;
+
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    out[key] = toAnyOfNullable(value);
+  }
+
+  const type = out["type"];
+  if (Array.isArray(type) && type.includes("null")) {
+    const { type: _dropped, description, ...rest } = out;
+    const others = type.filter((t) => t !== "null");
+    return {
+      ...(description === undefined ? {} : { description }),
+      anyOf: [...others.map((t) => ({ type: t, ...rest })), { type: "null" }],
+    };
+  }
+  return out;
+}
+
+/**
+ * Spell the output contract out in the prompt.
+ *
+ * Models advertising `structured_outputs: false` accept a json_schema and then
+ * ignore it: Minimax returned tidy JSON under keys it invented
+ * ("record_type", "item", "quantity"), which fails validation every time. Naming
+ * the keys in the prompt is what actually makes those models comply — measured,
+ * it produced all 17 keys with none missing or extra. It costs a couple of
+ * hundred tokens and does no harm to models that do honour the schema.
+ */
+export function buildFieldContract(jsonSchema: Record<string, unknown>): string {
+  const properties = (jsonSchema["properties"] ?? {}) as Record<string, Record<string, unknown>>;
+  const lines = Object.entries(properties).map(([name, spec]) => {
+    const anyOf = spec["anyOf"] as Array<{ type?: string }> | undefined;
+    const type = spec["type"] ?? anyOf?.map((a) => a.type).filter(Boolean).join("|") ?? "string";
+    const description = spec["description"] ? `  // ${String(spec["description"])}` : "";
+    return `  "${name}": ${JSON.stringify(type)}${description}`;
+  });
+  return [
+    "",
+    "OUTPUT FORMAT — reply with ONE JSON object and nothing else: no prose, no",
+    "markdown fences. Use exactly these keys, all of them, with null where a key",
+    "does not apply to the kind you chose:",
+    "{",
+    ...lines,
+    "}",
+  ].join("\n");
+}
+
 export class OpenRouterParser implements Parser {
   private readonly client: OpenRouter;
   private readonly model: string;
   private readonly timeZone: string;
+  /** Flips once and stays flipped when a provider rejects json_schema. */
+  private schemaMode: "schema" | "json_object" = "schema";
   private cache: {
     signature: string;
     ctx: PromptContext;
@@ -164,7 +223,7 @@ export class OpenRouterParser implements Parser {
     const schema = buildIntentSchema(categories, accounts);
     // zod emits additionalProperties:false with every property required, which
     // is exactly what strict json_schema mode wants.
-    const jsonSchema = z.toJSONSchema(schema) as Record<string, unknown>;
+    const jsonSchema = toAnyOfNullable(z.toJSONSchema(schema)) as Record<string, unknown>;
     const prepared = { signature, ctx, schema, jsonSchema };
     this.cache = prepared;
     return prepared;
@@ -262,17 +321,31 @@ export class OpenRouterParser implements Parser {
         chatRequest: {
           model: this.model,
           messages: [
-            { role: "system", content: system },
+            { role: "system", content: system + buildFieldContract(jsonSchema) },
             { role: "user", content },
           ],
-          responseFormat: {
-            type: "json_schema",
-            jsonSchema: { name: "ledger_intent", strict: true, schema: jsonSchema },
-          },
+          responseFormat:
+            this.schemaMode === "schema"
+              ? {
+                  type: "json_schema",
+                  jsonSchema: { name: "ledger_intent", strict: true, schema: jsonSchema },
+                }
+              : { type: "json_object" },
           stream: false,
         },
       } as never);
     } catch (error) {
+      // A provider that cannot parse the schema says so by rejecting the
+      // request. Drop to plain JSON mode for the rest of this process rather
+      // than failing every message — the prompt already carries the contract.
+      if (this.schemaMode === "schema" && looksLikeSchemaRejection(error)) {
+        this.schemaMode = "json_object";
+        console.warn(
+          `[parse] ${this.model} rejected the json_schema response format; ` +
+            "falling back to json_object with the field contract in the prompt.",
+        );
+        throw new ParseFailure("Retrying without the json_schema response format.");
+      }
       throw new ParseFailure(describeOpenRouterError(error), error);
     }
 
@@ -299,6 +372,29 @@ export class OpenRouterParser implements Parser {
     }
     return parsed.data;
   }
+}
+
+/**
+ * Did the provider refuse the schema itself, rather than fail at the task?
+ *
+ * Minimax reports it as `invalid params, Mismatch type ...` inside a 200
+ * response, so this matches on the wording rather than a status code. Matching
+ * too broadly would hide real failures behind a silent mode change, so it stays
+ * narrow.
+ */
+function looksLikeSchemaRejection(error: unknown): boolean {
+  const text = JSON.stringify(
+    (error as { body?: unknown } | null)?.body ??
+      (error instanceof Error ? error.message : error) ??
+      "",
+  ).toLowerCase();
+  return (
+    text.includes("invalid params") ||
+    text.includes("mismatched type") ||
+    text.includes("mismatch type") ||
+    text.includes("json_schema") ||
+    text.includes("response_format")
+  );
 }
 
 /** Reads the assistant text out of a chat completion, tolerating both shapes. */

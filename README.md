@@ -219,6 +219,27 @@ Measured on the 33-case eval:
 | `anthropic` / `claude-sonnet-5` | **33/33** | 2.7s | $3.43/mo |
 | `openrouter` / `openrouter/free` | **20/33** | 42s | free |
 | `openrouter` / `nvidia/nemotron-3-super-120b-a12b:free` | 6/8 screen | 7.5s | free |
+| `openrouter` / `minimax/minimax-m3.1-flash:free` | **33/33** | 3.5s | **free** |
+
+`minimax/minimax-m3.1-flash:free` matches Sonnet 5 case for case at comparable
+speed and no cost, but only because of two fixes it needed first — without them
+it scored 0/8:
+
+- **The schema form.** zod emits nullable fields as `type: ["string","null"]`,
+  which Minimax's schema parser rejects outright (`invalid params, Mismatch type
+  string with value array`). `toAnyOfNullable` rewrites them as
+  `anyOf: [{type:"string"},{type:"null"}]`, which says the same thing and is
+  accepted more widely.
+- **The field contract.** A model advertising `structured_outputs: false`
+  accepts a `json_schema` and then ignores it: Minimax returned tidy JSON under
+  keys it had invented (`record_type`, `item`, `quantity`), which fails
+  validation every time. `buildFieldContract` names the keys in the prompt
+  instead, which is what actually makes such models comply. It costs a couple of
+  hundred tokens and does no harm to models that honour the schema.
+
+The parser drops from `json_schema` to `json_object` on its own, permanently for
+that process, when a provider rejects the schema — the prompt already carries the
+contract, so there is no reason to fail every message over it.
 
 Screened with `npx tsx scripts/screen-models.ts <model-id> ...` — eight cases in
 about 90 seconds, for deciding which models are worth a full eval at all. It
