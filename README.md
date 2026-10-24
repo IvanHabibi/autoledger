@@ -219,7 +219,25 @@ Measured on the 33-case eval:
 | `anthropic` / `claude-sonnet-5` | **33/33** | 2.7s | $3.43/mo |
 | `openrouter` / `openrouter/free` | **20/33** | 42s | free |
 | `openrouter` / `nvidia/nemotron-3-super-120b-a12b:free` | 6/8 screen | 7.5s | free |
-| `openrouter` / `minimax/minimax-m3.1-flash:free` | **33/33** | 3.5s | **free** |
+| `openrouter` / `minimax/minimax-m3.1-flash:free` | 33/33 | 3.4s | free — **retired Oct 2026** |
+| `openrouter` / `minimax/minimax-m3.1-flash` (paid) | 33/33 | 3.5s | ~$0.25/mo |
+| `openrouter` / `nvidia/nemotron-3-ultra-550b-a55b:free` | **32/33** | 13s | free |
+
+**A `:free` endpoint can be withdrawn without warning, and that is an outage.**
+`minimax/minimax-m3.1-flash:free` was retired when its launch period ended, and
+the bot rejected every entry for about two days until the model was changed. It
+failed loudly — `OpenRouter does not recognise that model` — and the failure is
+classified as permanent, so it does not burn retries on a model that no longer
+exists, and nothing wrong reached the sheet. But nothing warns you in advance.
+If uptime matters more than the last fraction of a dollar, a paid endpoint does
+not evaporate: the same minimax model costs about $0.25/month at household
+volume, against $3.43 for `claude-sonnet-5`.
+
+`nvidia/nemotron-3-ultra-550b-a55b:free` reaches 32/33, and its one miss is a
+20s attempt timeout on `top up gopay 200rb` rather than a misread — the model
+parses it, just too slowly. Widening that ceiling is not the fix: it exists to
+keep a slow parse from being told "accepted" while its sheet write is starved
+(see Deployment).
 
 `minimax/minimax-m3.1-flash:free` matches Sonnet 5 case for case at comparable
 speed and no cost, but only because of two fixes it needed first — without them
